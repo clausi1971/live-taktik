@@ -1,0 +1,9 @@
+# Die Taktiktafel
+
+LIVE TAKTIK V.2 von C. Meurer. Interaktive Fußball-Taktiktafel mit verschiebbaren Spielern, automatischer blauer Mannschaft und animierten Pässen.
+
+## Nutzung
+
+Die App läuft direkt im Browser. GitHub Pages veröffentlicht die Datei `index.html` aus dem Hauptverzeichnis des Branches `main`. Es sind keine Installation und kein Build nötig.
+
+Spielszene speichern und laden erfolgt lokal über JSON-Dateien. Die App benötigt keinen Server für Spielberechnungen.
