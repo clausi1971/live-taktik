@@ -366,6 +366,9 @@ function calculate(){
  if(press)roles[presser]=state.pressure?'Druck':'Attackieren';else roles[presser]='Ballraum sichern';
  let doubler=null;if(state.double){doubler=order[1].id;reserved.add(doubler);roles[doubler]='Doppeln';}
  const supports=[];
+ // The holding midfielder covers a pressing attacking midfielder even when extra cover is off.
+ const automaticZDM=state.blueFormation==='4-2-3-1'&&press&&[7,9].includes(presser)?[5,6].filter(id=>!reserved.has(id)&&!state.manualBlue[id]).sort((a,b)=>dist(anchors[a],anchors[presser])-dist(anchors[b],anchors[presser]))[0]:undefined;
+ if(automaticZDM!==undefined){supports.push(automaticZDM);reserved.add(automaticZDM);roles[automaticZDM]='Abkippen / Sichern';}
  if((state.p14&&press)||state.cover){
   const candidates=order.filter(p=>!reserved.has(p.id)).sort((a,b)=>{
    const cost=p=>dist(p,anchors[presser])+(p.row>anchors[presser].row?6:0);
@@ -417,6 +420,11 @@ function calculate(){
  spaceBlueStrikers(result,true);
  keep4231StrikerAhead(result);
  const seam=placeStrikerInSeam(result,strikerIds,lanes);
+ if(automaticZDM!==undefined){
+  const p=result[presser],a=result[automaticZDM],inside=p.x<34?1:-1;
+  result[automaticZDM]={...a,x:insideBallSide({x:p.x+inside*3,y:p.y+6}).x,y:clamp(p.y+6,1,95)};
+  delete assignments[automaticZDM];assignmentNotes[automaticZDM]='Hinter dem pressenden ZM absichern und den diagonalen Passweg schließen';
+ }
  position4231ZOM(result,lanes);
  keep4231StrikerAhead(result);
  limitBlueDiscOverlap(result);
@@ -429,7 +437,7 @@ function calculate(){
   if(old!==undefined&&old!==key)transfers.push('Rot '+(red+1)+': Blau '+(+old+1)+' → Blau '+(+key+1));
  }
  if(transfers.length)handoverNotice='Übergabe · '+transfers.slice(0,2).join(' · ');
- previousAssignments={...assignments};lastReport={press,presser,supports,floating,autoPress,transfers,lanes,seam};
+ previousAssignments={...assignments};lastReport={press,presser,supports,floating,autoPress,transfers,lanes,seam,automaticZDM};
  if(startLayoutSignature!==null){if(startLayoutSignature===layoutSignature())return startBluePositions.map(p=>({...p}));startLayoutSignature=null;}
  return result;
 }
