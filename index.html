@@ -632,17 +632,35 @@ if(document.documentElement){
 // Guided transition demonstration; underlying tactical scene remains untouched.
 let transitionDemo=null;
 function demoMix(a,b,t){t=clamp(t,0,1);return{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};}
+// A pass needs room for both the red player disc and the ball throughout its flight.
+function demoRedAt(p,id,t){return id?demoMix(p,{x:p.x,y:Math.max(3,p.y-5)},(t-3)/12):p;}
+function demoPointSegment(p,a,b){const x=b.x-a.x,y=b.y-a.y,u=clamp(((p.x-a.x)*x+(p.y-a.y)*y)/(x*x+y*y||1),0,1);return dist(p,{x:a.x+u*x,y:a.y+u*y});}
+function demoSegmentsDistance(a,b,c,d){
+ const cross=(p,q,r)=>(q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x);
+ if(cross(a,b,c)*cross(a,b,d)<0&&cross(c,d,a)*cross(c,d,b)<0)return 0;
+ return Math.min(demoPointSegment(a,c,d),demoPointSegment(b,c,d),demoPointSegment(c,a,b),demoPointSegment(d,a,b));
+}
+function demoPassClear(rs,a,b,from,to){return rs.every((p,id)=>demoSegmentsDistance(a,b,demoRedAt(p,id,from),demoRedAt(p,id,to))>=3.4);}
 function startTransitionDemo(){
  const bs=blue.map(p=>({...p})),rs=state.reds.map(p=>({...p})),ball={...state.ball};
  const winner=bs.map((p,id)=>({p,id})).filter(v=>v.id).sort((a,b)=>dist(a.p,ball)-dist(b.p,ball))[0].id;
- const candidates=bs.map((p,id)=>({p,id})).filter(v=>v.id&&v.id!==winner&&v.p.y<ball.y-3);
- const receiver=(candidates.sort((a,b)=>Math.abs(dist(a.p,ball)-14)-Math.abs(dist(b.p,ball)-14))[0]||{id:winner===8?7:8}).id;
- const runner=(bs.map((p,id)=>({p,id})).filter(v=>v.id&&v.id!==winner&&v.id!==receiver).sort((a,b)=>a.p.y-b.p.y)[0]).id;
- const win={x:ball.x,y:ball.y+1},offer={x:clamp(win.x+(bs[receiver].x<win.x?-7:7),4,64),y:clamp(win.y-5,10,90)};
- const laneClearance=(a,b)=>Math.min(...rs.slice(1).map(p=>{const q={x:p.x,y:Math.max(3,p.y-3)};const vx=b.x-a.x,vy=b.y-a.y,u=clamp(((q.x-a.x)*vx+(q.y-a.y)*vy)/(vx*vx+vy*vy||1),0,1);return dist(q,{x:a.x+u*vx,y:a.y+u*vy});}));
- const deepY=Math.max(8,Math.min(offer.y-15,bs[runner].y-7));
- const deep=[10,18,26,34,42,50,58].map(x=>({x,y:deepY})).sort((a,b)=>(laneClearance(offer,b)-dist(bs[runner],b)*.04)-(laneClearance(offer,a)-dist(bs[runner],a)*.04))[0];
- transitionDemo={bs,rs,ball,winner,receiver,runner,win,offer,deep,time:0,paused:false};
+ // Secure the ball in nearby space before attempting the first pass.
+ const winOptions=[];for(const dx of [0,-3,3,-6,6])for(const dy of [1,4,7,-4]){const q={x:clamp(ball.x+dx,3,65),y:clamp(ball.y+dy,4,98)};if(demoPassClear(rs,q,q,2,6))winOptions.push(q);}
+ const win=winOptions.sort((a,b)=>dist(a,ball)-dist(b,ball))[0]||{x:ball.x,y:clamp(ball.y+1,3,102)};
+ const offers=[];
+ bs.forEach((p,id)=>{if(!id||id===winner)return;for(const dx of [-12,-8,-4,0,4,8,12])for(const dy of [-10,-6,-2,3,7]){
+ const q={x:win.x+dx,y:win.y+dy},length=dist(win,q);if(q.x<3||q.x>65||q.y<5||q.y>98||length<6||length>15||dist(p,q)>16||dist(p,win)<length+1)continue;
+ if(demoPassClear(rs,win,q,5,6))offers.push({id,q,score:dist(p,q)+length*.2+Math.max(0,dy)*2});
+ }});
+ const first=offers.sort((a,b)=>a.score-b.score)[0];
+ const receiver=first?.id||(winner===8?7:8),offer=first?.q||{...win};
+ const runs=[];if(first)bs.forEach((p,id)=>{if(!id||id===winner||id===receiver)return;for(let x=6;x<=62;x+=4)for(const advance of [18,14,10,6]){
+ const q={x,y:Math.max(6,offer.y-advance)};if(dist(p,q)>24)continue;
+ if(demoPassClear(rs,offer,q,9,11))runs.push({id,q,score:dist(p,q)*.3-advance});
+ }});
+ const second=runs.sort((a,b)=>a.score-b.score)[0];
+ const runner=second?.id||bs.findIndex((p,id)=>id&&id!==winner&&id!==receiver),deep=second?.q||{...bs[runner]};
+ transitionDemo={bs,rs,ball,winner,receiver,runner,win,offer,deep,firstPass:!!first,secondPass:!!second,time:0,paused:false};
  $('pitch').classList.add('transition-playing');$('transitionControls').hidden=false;$('transitionStart').setAttribute('aria-pressed','true');$('transitionPause').textContent='Pause';lastTime=0;
 }
 function stopTransitionDemo(){if(!transitionDemo)return;transitionDemo=null;$('pitch').classList.remove('transition-playing');$('transitionLayer').replaceChildren();$('transitionControls').hidden=true;$('transitionStart').setAttribute('aria-pressed','false');lastTime=0;}
@@ -650,14 +668,14 @@ function renderTransitionDemo(dt){
  const d=transitionDemo;if(!d)return;if(!d.paused)d.time=Math.min(15,d.time+dt);const t=d.time,root=$('transitionLayer');root.replaceChildren();
  const ps=d.bs.map((p,id)=>id?demoMix(p,{x:p.x,y:Math.max(5,p.y-7)},(t-6)/9):p);
  ps[d.winner]=demoMix(d.bs[d.winner],d.win,t/2);
- ps[d.receiver]=t<8?demoMix(d.bs[d.receiver],d.offer,(t-2)/3):demoMix(d.offer,{x:d.offer.x,y:Math.max(6,d.offer.y-13)},(t-10)/5);
- ps[d.runner]=demoMix(d.bs[d.runner],d.deep,(t-5)/6);
- let ball=t<2?demoMix(d.ball,d.win,t/2):t<5?d.win:t<6?demoMix(d.win,d.offer,t-5):t<9?d.offer:t<11?demoMix(d.offer,ps[d.runner],(t-9)/2):ps[d.runner];
+ if(d.firstPass)ps[d.receiver]=t<11||!d.secondPass?demoMix(d.bs[d.receiver],d.offer,(t-2)/3):demoMix(d.offer,{x:d.offer.x,y:Math.max(6,d.offer.y-13)},(t-11)/4);
+ if(d.secondPass)ps[d.runner]=demoMix(d.bs[d.runner],d.deep,(t-5)/4);
+ let ball=t<2?demoMix(d.ball,d.win,t/2):!d.firstPass||t<5?d.win:t<6?demoMix(d.win,d.offer,t-5):!d.secondPass||t<9?d.offer:t<11?demoMix(d.offer,d.deep,(t-9)/2):ps[d.runner];
  const stage=t<2?'1 · Ballgewinn':t<5?'2 · Blick nach vorne – Mitspieler kommt entgegen':t<6?'3 · Erster Pass sicher':t<9?'4 · Ball sichern – Tiefe anbieten':t<11?'5 · Freien Spieler nach vorne anspielen':t<15?'6 · Nach dem Abspiel selbst in die Tiefe starten':'Animation beendet · Wiederholen oder schließen';
- $('transitionStatus').textContent=stage;if(t===15){d.paused=true;$('transitionPause').textContent='Weiter';}
+ $('transitionStatus').textContent=t>=2&&!d.firstPass?'Ball sichern · noch kein freier Passweg':t>=6&&!d.secondPass?'Erster Pass sicher · Ball halten, bis der Weg nach vorne frei ist':stage;if(t===15){d.paused=true;$('transitionPause').textContent='Weiter';}
  const line=(a,b,color)=>el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:color,'stroke-width':'.4','stroke-dasharray':'1 1','marker-end':'url(#arrow)'},root);
- if(t>=2&&t<6)line(d.win,d.offer,'#e9d780');if(t>=6&&t<11)line(d.offer,ps[d.runner],'#e9d780');
- d.rs.forEach((p,id)=>{const q=id?demoMix(p,{x:p.x,y:Math.max(3,p.y-5)},(t-3)/12):p;draw(q,'red',id);});ps.forEach((p,id)=>draw(p,'blue',id));
+ if(d.firstPass&&t>=2&&t<6)line(d.win,d.offer,'#e9d780');if(d.secondPass&&t>=6&&t<11)line(d.offer,d.deep,'#e9d780');
+ d.rs.forEach((p,id)=>{draw(demoRedAt(p,id,t),'red',id);});ps.forEach((p,id)=>draw(p,'blue',id));
  function draw(p,team,id){const g=el('g',{transform:`translate(${p.x} ${p.y})`},root);el('circle',{r:1.9,fill:team==='blue'?'#6cace9':'#e37265',stroke:'#fff9','stroke-width':'.22'},g);el('text',{'text-anchor':'middle','dominant-baseline':'central','font-size':'1.6',fill:'white','font-weight':'700'},g).textContent=playerLabel(team,id);}
  el('circle',{cx:ball.x,cy:ball.y,r:1.05,fill:'#fff',stroke:'#e8d37b','stroke-width':'.5'},root);
 }
