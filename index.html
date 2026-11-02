@@ -206,8 +206,39 @@ function freeBluePosition(wanted,occupied,id,limitSide=false,limitForward=false)
 function separateBluePositions(players,limitSide=false){
  const occupied=[];players.forEach((p,id)=>{const q=freeBluePosition(p,occupied,id,limitSide,!state.manualBlue[id]&&!['Druck','Attackieren','Doppeln'].includes(roles[id]));Object.assign(p,q);occupied.push(p);});
 }
+const playerDiscRadius=1.9,maxDiscOverlap=.30;
+function discOverlapRatio(distance){const d=clamp(distance,0,2*playerDiscRadius),r=playerDiscRadius;return (2*r*r*Math.acos(d/(2*r))-.5*d*Math.sqrt(Math.max(0,4*r*r-d*d)))/(Math.PI*r*r);}
+const minimumDiscDistance=(()=>{let low=0,high=2*playerDiscRadius;for(let i=0;i<60;i++){const mid=(low+high)/2;if(discOverlapRatio(mid)>maxDiscOverlap)low=mid;else high=mid;}return high+1e-5;})();
+function keepRedDiscsApart(){
+ const ownerBefore={...state.reds[state.owner]},wasDocked=dist(state.ball,{x:clamp(ownerBefore.x+2,0,68),y:clamp(ownerBefore.y+1,0,105)})<.01;
+ for(const ids of redChains())for(let pass=0;pass<30;pass++){let moved=false;const sorted=[...ids].sort((a,b)=>state.reds[a].x-state.reds[b].x||a-b);for(let i=0;i<sorted.length;i++)for(let j=i+1;j<sorted.length;j++){const a=state.reds[sorted[i]],b=state.reds[sorted[j]],dy=Math.abs(b.y-a.y);if(dy>=minimumDiscDistance)continue;const required=Math.sqrt(minimumDiscDistance**2-dy**2),gap=b.x-a.x;if(gap>=required-1e-8)continue;const missing=required-gap;let left=Math.max(1,a.x-missing/2),right=Math.min(67,b.x+missing/2);if(right-left<required){if(left===1)right=left+required;else left=right-required;}a.x=left;b.x=right;moved=true;}if(!moved)break;}
+ if(wasDocked&&!ballPass&&dist(ownerBefore,state.reds[state.owner])>1e-8)dock();
+}
+function discBound(p,id){p.x=clamp(p.x,0,68);p.y=clamp(p.y,0,id===10&&!state.manualBlue[id]&&!['Druck','Attackieren','Doppeln'].includes(roles[id])?52.5:95);}
+function moveDiscOut(p,obstacle,id){
+ const d=dist(p,obstacle);if(d>=minimumDiscDistance-1e-8)return false;
+ const dx=d>1e-8?(p.x-obstacle.x)/d:1,dy=d>1e-8?(p.y-obstacle.y)/d:0,old={x:p.x,y:p.y};p.x=obstacle.x+dx*minimumDiscDistance;p.y=obstacle.y+dy*minimumDiscDistance;discBound(p,id);
+ if(dist(p,obstacle)<minimumDiscDistance-1e-7){let best=null;for(let j=0;j<48;j++){const angle=j*Math.PI/24,q={x:obstacle.x+Math.cos(angle)*minimumDiscDistance,y:obstacle.y+Math.sin(angle)*minimumDiscDistance};discBound(q,id);if(dist(q,obstacle)>=minimumDiscDistance-1e-7&&(!best||dist(q,old)<best.score))best={...q,score:dist(q,old)};}if(best){p.x=best.x;p.y=best.y;}}
+ return true;
+}
+function limitBlueDiscOverlap(players,redPlayers=state.reds){
+ for(let pass=0;pass<60;pass++){let moved=false;
+  for(let i=0;i<players.length;i++)for(const red of redPlayers)moved=moveDiscOut(players[i],red,i)||moved;
+  for(let i=0;i<players.length;i++)for(let j=i+1;j<players.length;j++){
+   const a=players[i],b=players[j],d=dist(a,b);if(d>=minimumDiscDistance-1e-8)continue;
+   const dx=d>1e-8?(b.x-a.x)/d:0,dy=d>1e-8?(b.y-a.y)/d:1,amount=(minimumDiscDistance-d)/2;
+   a.x-=dx*amount;a.y-=dy*amount;b.x+=dx*amount;b.y+=dy*amount;discBound(a,i);discBound(b,j);moved=true;
+  }
+  if(!moved)break;
+ }
+}
+function blueAvoidanceTarget(id,target){
+ const p=blue[id],distance=dist(p,target);if(distance<.05)return target;const ux=(target.x-p.x)/distance,uy=(target.y-p.y)/distance;let nearest=Infinity;
+ for(const q of [...state.reds,...blue.filter((_,j)=>j!==id)]){const dx=q.x-p.x,dy=q.y-p.y,along=dx*ux+dy*uy;if(along<=0||along>Math.min(5,distance))continue;const lateral=Math.abs(dx*uy-dy*ux);if(lateral<minimumDiscDistance+.2&&dist(p,q)<5)nearest=Math.min(nearest,along);}
+ if(!Number.isFinite(nearest))return target;const horizon=Math.min(3,distance);return {x:p.x+ux*horizon-uy*3,y:p.y+uy*horizon+ux*3};
+}
 function moveBlueRunner(id,target,step){
- const p=blue[id];integrateRunner(p,target,step);
+ const p=blue[id];integrateRunner(p,blueAvoidanceTarget(id,target),step);
  // Runners may pass each other; minimum spacing applies to their chosen positions.
  if(p.y>95){p.y=95;p.vy=Math.min(0,p.vy);}
  if(id===10&&!state.manualBlue[id]&&!['Druck','Attackieren','Doppeln'].includes(roles[id])&&p.y>52.5){p.y=52.5;p.vy=Math.min(0,p.vy);}
@@ -368,6 +399,7 @@ function calculate(){
  spaceBlueStrikers(result,true);
  keep4231StrikerAhead(result);
  const seam=placeStrikerInSeam(result,strikerIds,lanes);
+ limitBlueDiscOverlap(result);
  
  
  // Passing a receiver across zones transfers responsibility instead of pulling one marker indefinitely.
@@ -415,7 +447,7 @@ function drawChainHighlights(){
  });
 }
 function refresh(){
- updatePlayerLabels();updateChainControls();targets=calculate();updateDepthUI();if(!blue.length)blue=targets.map(p=>({...p}));for(const [id,p] of Object.entries(state.manualBlue))if(!lastReport.press||+id!==lastReport.presser)Object.assign(blue[id],+id?insideBallSide(p):p,{vx:0,vy:0});
+ keepRedDiscsApart();updatePlayerLabels();updateChainControls();targets=calculate();updateDepthUI();if(!blue.length)blue=targets.map(p=>({...p}));for(const [id,p] of Object.entries(state.manualBlue))if(!lastReport.press||+id!==lastReport.presser)Object.assign(blue[id],+id?insideBallSide(p):p,{vx:0,vy:0});limitBlueDiscOverlap(blue);
  $('owner').textContent=ballPass?'Pass zu Rot '+(ballPass.to+1)+' · '+Math.round((ballPass.speed||passSpeed)*3.6)+' km/h':drag?.kind==='ball'?'Ball frei · loslassen':'Ball bei Rot '+(state.owner+1);
  $('spacingValue').textContent=state.spacing+' m';for(const k of ['pressure','cover','double','p12','p13','p14'])$(k).setAttribute('aria-pressed',state[k]);
  $('explain').setAttribute('aria-pressed',state.explanations);$('explain').textContent='ⓘ Erklärungen '+(state.explanations?'an':'aus');document.body.classList.toggle('hide-explanations',!state.explanations);
@@ -427,6 +459,7 @@ function refresh(){
  if(state.blueFormation==='4-2-3-1')parts.push('Im 4-2-3-1 hält der blaue Stürmer mindestens 3 m vertikalen Abstand vor der offensiven Dreierkette, Richtung rotes Tor. Größere Abstände bleiben bestehen.');
  parts.push('Die weiteren blauen Stürmer stellen ballnah einen erreichbaren Passweg zu. Die Rollen bleiben während derselben Passsituation stabil.');
  parts.push('Der jeweils ballnähere blaue Stürmer besetzt die Schnittstelle zwischen den roten Innenverteidigern, etwa 3 m vor deren Linie auf der Ballseite.');
+ parts.push('Spielerpunkte überlappen höchstens zu 30 Prozent ihrer Kreisfläche. Beim Laufen weichen blaue Spieler seitlich aus; diese sichtbare Überlappungsgrenze bleibt immer aktiv.');
  parts.push('Für Zielpositionen gilt: Kommt ein blauer Stürmer in den Umkreis von 0 bis einschließlich 4 m eines anderen, werden die Ziele horizontal auf mindestens 6 m Abstand auseinandergerückt. Während des Laufens zum Ziel ignorieren alle blauen Spieler die Abstandsregeln untereinander. Sie dürfen sich kreuzen und näherkommen. Höhen- und Abstandsregeln zwischen blauen Spielern werden ausschließlich für die Zielpositionen berechnet.');
  parts.push('In Vierer- und Fünferketten stehen die blauen Außenverteidiger mindestens 2 m höher als ihr direkt benachbarter Innenverteidiger. Die benachbarten IV-Ziele bleiben jeweils mindestens 4 m seitlich nach innen versetzt zum LV bzw. RV. Diese Abstände werden während des Laufens nicht erzwungen.');
  parts.push('Rote Ketten bleiben in ihrer Reihenfolge und halten in Spielrichtung mindestens 4 m Abstand zur benachbarten Kette.');
@@ -474,7 +507,7 @@ function closestBlueToBall(){const front=formations[state.blueFormation].length-
 function advanceMotion(seconds){
  const ballMoved=advanceBall(seconds);if(ballMoved||(state.pressure&&closestBlueToBall()!==lastReport.presser)||nearestBlueStriker()!==lastReport.seam?.id)refresh();
  // Small fixed-size substeps keep distances and acceleration consistent across frame rates.
- let remaining=seconds;while(remaining>1e-9){const step=Math.min(remaining,motion.maxStep);blue.forEach((p,i)=>{if(i&&(!state.manualBlue[i]||(lastReport.press&&i===lastReport.presser))){moveBlueRunner(i,targets[i],step);}});targets[0]=goalkeeperTarget(blue.slice(1));if(!state.manualBlue[0])moveBlueRunner(0,targets[0],step);remaining-=step;}
+ let remaining=seconds;while(remaining>1e-9){const step=Math.min(remaining,motion.maxStep);blue.forEach((p,i)=>{if(i&&(!state.manualBlue[i]||(lastReport.press&&i===lastReport.presser))){moveBlueRunner(i,targets[i],step);}});targets[0]=goalkeeperTarget(blue.slice(1));if(!state.manualBlue[0])moveBlueRunner(0,targets[0],step);limitBlueDiscOverlap(blue);remaining-=step;}
  if((state.pressure&&closestBlueToBall()!==lastReport.presser)||nearestBlueStriker()!==lastReport.seam?.id)refresh();
 }
 function updateMotionReadout(){
