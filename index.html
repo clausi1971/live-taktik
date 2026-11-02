@@ -221,20 +221,22 @@ function raiseBlueFullbacks(players,spaceTargets=false){
   }
  }
 }
+function needsStrikerHorizontalGap(a,b){return dist(a,b)<=4+1e-8;}
 function spaceBlueStrikers(players,spaceTargets=false){
  const front=formations[state.blueFormation].length-1,ids=players.map((p,id)=>id&&(spaceTargets?p.row:(targets[id]?.row??p.row))===front?id:0).filter(Boolean).sort((a,b)=>players[a].x-players[b].x||a-b);
- if(ids.length<2||ids.every((id,j)=>!j||players[id].x-players[ids[j-1]].x>=6-1e-8))return;
+ const pairs=[];for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++)if(needsStrikerHorizontalGap(players[ids[i]],players[ids[j]]))pairs.push([i,j]);
+ if(!pairs.some(([i,j])=>players[ids[j]].x-players[ids[i]].x<6-1e-8))return;
  const gap=6,minimumWidth=(ids.length-1)*gap,bounds=spaceTargets?ballSideBounds():{left:-3,right:71};
  let left=Math.max(0,bounds.left+3),right=Math.min(68,bounds.right-3);if(right-left<minimumWidth){left=0;right=68;}
  const xs=ids.map(id=>clamp(players[id].x,left,right));
- // Only close pairs are spread; larger distances are never contracted to six metres.
- for(let pass=0;pass<40;pass++)for(let j=1;j<xs.length;j++){const missing=gap-(xs[j]-xs[j-1]);if(missing>0){xs[j-1]=Math.max(left,xs[j-1]-missing/2);xs[j]=Math.min(right,xs[j]+missing/2);}}
- for(let j=1;j<xs.length;j++)xs[j]=Math.max(xs[j],xs[j-1]+gap);
- xs[xs.length-1]=Math.min(right,xs.at(-1));for(let j=xs.length-2;j>=0;j--)xs[j]=Math.min(xs[j],xs[j+1]-gap);
+ for(let pass=0;pass<40;pass++)for(const [i,j] of pairs){const missing=gap-(xs[j]-xs[i]);if(missing>0){xs[i]=Math.max(left,xs[i]-missing/2);xs[j]=Math.min(right,xs[j]+missing/2);}}
+ // Only strikers within a four-metre radius trigger horizontal separation.
+ for(const [i,j] of pairs)xs[j]=Math.max(xs[j],xs[i]+gap);
+ for(let j=xs.length-1;j>=0;j--){xs[j]=Math.min(right,xs[j]);for(const [i,k] of pairs)if(k===j)xs[i]=Math.min(xs[i],xs[j]-gap);}
  let shift=0;
  if(spaceTargets){const occupied=players.filter((_,id)=>!ids.includes(id));
   outer:for(let offset=0;offset<=68;offset+=.05)for(const candidate of [offset,-offset]){
-   if(xs[0]+candidate<left||xs.at(-1)+candidate>right)continue;
+   if(Math.min(...xs)+candidate<left||Math.max(...xs)+candidate>right)continue;
    if(ids.every((id,j)=>occupied.every(q=>Math.hypot(xs[j]+candidate-q.x,players[id].y-q.y)>=minimumBlueDistance+1e-7))){shift=candidate;break outer;}
   }
  }
@@ -261,7 +263,7 @@ function placeStrikerInSeam(result,ids,lanes){
  const x=clamp((pair[0].p.x+pair[1].p.x)/2,1,67),ivLine=(pair[0].p.y+pair[1].p.y)/2;result[selected].x=x;result[selected].y=clamp(ivLine+(state.ball.y>=ivLine?3:-3),1,95);if(state.blueFormation==='4-2-3-1')result[selected].y=Math.min(result[selected].y,Math.max(0,Math.min(result[7].y,result[8].y,result[9].y)-3));
  // Hold the selected striker in the seam; the other forwards keep their lateral minimum distance.
  const others=ids.filter(id=>id!==selected).sort((a,b)=>result[a].x-result[b].x);let left=x-6,right=x+6;
- for(const id of others){const p=result[id];if(p.x<x&&left>=1){p.x=Math.min(p.x,left);left=p.x-6;}else if(right<=67){p.x=Math.max(p.x,right);right=p.x+6;}else{p.x=Math.min(p.x,left);left=p.x-6;}p.x=clamp(p.x,1,67);}
+ for(const id of others){const p=result[id];if(!needsStrikerHorizontalGap(p,result[selected]))continue;if(p.x<x&&left>=1){p.x=Math.min(p.x,left);left=p.x-6;}else if(right<=67){p.x=Math.max(p.x,right);right=p.x+6;}else{p.x=Math.min(p.x,left);left=p.x-6;}p.x=clamp(p.x,1,67);}
  delete assignments[selected];roles[selected]='Passweg schließen';assignmentNotes[selected]='Schnittstelle zwischen Rot '+(pair[0].id+1)+' und Rot '+(pair[1].id+1)+' schließen';
  for(let i=lanes.length-1;i>=0;i--)if(lanes[i].id===selected)lanes.splice(i,1);
  pair.forEach(({p})=>lanes.push({id:selected,receiver:p}));
@@ -269,7 +271,7 @@ function placeStrikerInSeam(result,ids,lanes){
  for(const id of others){if(state.manualBlue[id])continue;let best=null;
   state.reds.forEach((receiver,red)=>{if(!red||red===state.owner||receiver.y>state.ball.y+3)return;const length=dist(receiver,state.ball);if(length<4)return;
    for(let metres=6;metres<=Math.min(16,length-1);metres+=.5){const t=metres/length,p={x:state.ball.x+(receiver.x-state.ball.x)*t,y:state.ball.y+(receiver.y-state.ball.y)*t};
-    if(p.x<bounds.left+3||p.x>bounds.right-3||p.y<1||p.y>95||(id===10&&p.y>50.5)||occupied.some(other=>Math.abs(p.x-result[other].x)<6))continue;
+    if(p.x<bounds.left+3||p.x>bounds.right-3||p.y<1||p.y>95||(id===10&&p.y>50.5)||occupied.some(other=>needsStrikerHorizontalGap(p,result[other])&&Math.abs(p.x-result[other].x)<6))continue;
     if(result.some((q,j)=>j!==id&&!others.includes(j)&&dist(p,q)<minimumBlueDistance+1e-7))continue;
     const score=metres+dist(result[id],p)*.08+length*.02;if(!best||score<best.score)best={...p,receiver,red,score};
    }
@@ -400,7 +402,7 @@ function drawChainHighlights(){
  });
 }
 function refresh(){
- updatePlayerLabels();updateChainControls();targets=calculate();updateDepthUI();if(!blue.length)blue=targets.map(p=>({...p}));for(const [id,p] of Object.entries(state.manualBlue))if(!lastReport.press||+id!==lastReport.presser)Object.assign(blue[id],+id?insideBallSide(p):p,{vx:0,vy:0});raiseBlueFullbacks(blue);spaceBlueStrikers(blue);keep4231StrikerAhead(blue);
+ updatePlayerLabels();updateChainControls();targets=calculate();updateDepthUI();if(!blue.length)blue=targets.map(p=>({...p}));for(const [id,p] of Object.entries(state.manualBlue))if(!lastReport.press||+id!==lastReport.presser)Object.assign(blue[id],+id?insideBallSide(p):p,{vx:0,vy:0});
  $('owner').textContent=ballPass?'Pass zu Rot '+(ballPass.to+1)+' · '+Math.round((ballPass.speed||passSpeed)*3.6)+' km/h':drag?.kind==='ball'?'Ball frei · loslassen':'Ball bei Rot '+(state.owner+1);
  $('spacingValue').textContent=state.spacing+' m';for(const k of ['pressure','cover','double','p12','p13','p14'])$(k).setAttribute('aria-pressed',state[k]);
  $('explain').setAttribute('aria-pressed',state.explanations);$('explain').textContent='ⓘ Erklärungen '+(state.explanations?'an':'aus');document.body.classList.toggle('hide-explanations',!state.explanations);
@@ -412,7 +414,7 @@ function refresh(){
  if(state.blueFormation==='4-2-3-1')parts.push('Im 4-2-3-1 hält der blaue Stürmer mindestens 3 m vertikalen Abstand vor der offensiven Dreierkette, Richtung rotes Tor. Größere Abstände bleiben bestehen.');
  parts.push('Die weiteren blauen Stürmer stellen ballnah einen erreichbaren Passweg zu. Die Rollen bleiben während derselben Passsituation stabil.');
  parts.push('Der jeweils ballnähere blaue Stürmer besetzt die Schnittstelle zwischen den roten Innenverteidigern, etwa 3 m vor deren Linie auf der Ballseite.');
- parts.push('Nur wenn blaue Stürmer seitlich näher als 6 m zusammenkommen, werden sie auf mindestens 6 m Abstand auseinandergerückt. Größere Abstände bleiben bestehen; bei drei Stürmern gilt dies zwischen den Nachbarn.');
+ parts.push('Für Zielpositionen gilt: Kommt ein blauer Stürmer in den Umkreis von 0 bis einschließlich 4 m eines anderen, werden die Ziele horizontal auf mindestens 6 m Abstand auseinandergerückt. Während des Laufens zum Ziel ignorieren alle blauen Spieler die Abstandsregeln untereinander. Sie dürfen sich kreuzen und näherkommen. Höhen- und Abstandsregeln zwischen blauen Spielern werden ausschließlich für die Zielpositionen berechnet.');
  parts.push('In Vierer- und Fünferketten stehen die blauen Außenverteidiger mindestens 2 m höher als ihr direkt benachbarter Innenverteidiger.');
  parts.push('Rote Ketten bleiben in ihrer Reihenfolge und halten in Spielrichtung mindestens 4 m Abstand zur benachbarten Kette.');
  parts.push('Der Ball bewegt sich im Bereich aller roten Mittelfeldspieler und dockt nur dort an. Beim 4-2-3-1 gehören beide Sechser und die drei offensiven Mittelfeldspieler dazu.');
@@ -459,7 +461,7 @@ function closestBlueToBall(){const front=formations[state.blueFormation].length-
 function advanceMotion(seconds){
  const ballMoved=advanceBall(seconds);if(ballMoved||(state.pressure&&closestBlueToBall()!==lastReport.presser)||nearestBlueStriker()!==lastReport.seam?.id)refresh();
  // Small fixed-size substeps keep distances and acceleration consistent across frame rates.
- let remaining=seconds;while(remaining>1e-9){const step=Math.min(remaining,motion.maxStep);blue.forEach((p,i)=>{if(i&&(!state.manualBlue[i]||(lastReport.press&&i===lastReport.presser))){moveBlueRunner(i,targets[i],step);}});targets[0]=goalkeeperTarget(blue.slice(1));if(!state.manualBlue[0])moveBlueRunner(0,targets[0],step);raiseBlueFullbacks(blue);spaceBlueStrikers(blue);keep4231StrikerAhead(blue);remaining-=step;}
+ let remaining=seconds;while(remaining>1e-9){const step=Math.min(remaining,motion.maxStep);blue.forEach((p,i)=>{if(i&&(!state.manualBlue[i]||(lastReport.press&&i===lastReport.presser))){moveBlueRunner(i,targets[i],step);}});targets[0]=goalkeeperTarget(blue.slice(1));if(!state.manualBlue[0])moveBlueRunner(0,targets[0],step);remaining-=step;}
  if((state.pressure&&closestBlueToBall()!==lastReport.presser)||nearestBlueStriker()!==lastReport.seam?.id)refresh();
 }
 function updateMotionReadout(){
@@ -493,7 +495,7 @@ function paint(time){const elapsed=lastTime?(time-lastTime)/1000:0;lastTime=time
 function point(e){let p=$('pitch').createSVGPoint();p.x=e.clientX;p.y=e.clientY;let q=p.matrixTransform($('pitch').getScreenCTM().inverse());return{x:clamp(q.x,1,67),y:clamp(q.y,1,104)};}
 function startDrag(e,kind,index){if(e.button!==0)return;if(kind==='ball')ballPass=null;e.preventDefault();let p=point(e),origin=kind==='ball'?state.ball:kind==='blue'?blue[index]:state.reds[index];drag={kind,index,id:e.pointerId,startX:e.clientX,startY:e.clientY,moved:false,dx:origin.x-p.x,dy:origin.y-p.y};$('pitch').setPointerCapture(e.pointerId);}
 $('pitch').addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;if(Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>4)drag.moved=true;if(!drag.moved)return;let q=point(e),p={x:clamp(q.x+drag.dx,1,67),y:clamp(q.y+drag.dy,1,104)};if(drag.kind==='blue')placeBlue(drag.index,p);else if(drag.kind==='ball'){state.manualBlue={};state.ball=midfieldBallPosition(p);}else{state.manualBlue={};state.reds[drag.index]=constrainRedPosition(drag.index,p);if(drag.index===state.owner)dock();else state.ball=midfieldBallPosition(state.ball);}refresh();});
-function placeBlue(i,p){if(i)p=insideBallSide(p);p=freeBluePosition(p,blue.filter((_,id)=>id!==i),i,!!i,false);state.manualBlue[i]={x:p.x,y:p.y};Object.assign(blue[i],p,{vx:0,vy:0});raiseBlueFullbacks(blue);spaceBlueStrikers(blue);keep4231StrikerAhead(blue);for(const id of Object.keys(state.manualBlue))state.manualBlue[id]={x:blue[id].x,y:blue[id].y};}
+function placeBlue(i,p){if(i)p=insideBallSide(p);p=freeBluePosition(p,blue.filter((_,id)=>id!==i),i,!!i,false);state.manualBlue[i]={x:p.x,y:p.y};Object.assign(blue[i],p,{vx:0,vy:0});for(const id of Object.keys(state.manualBlue))state.manualBlue[id]={x:blue[id].x,y:blue[id].y};}
 $('autoBlue').onclick=()=>{state.manualBlue={};refresh();};$('enableAutoBlue').onclick=()=>{state.manualBlue={};refresh();};
 function nearest(){return redMidfieldIds().map(i=>({i,d:dist(state.reds[i],state.ball)})).sort((a,b)=>a.d-b.d)[0].i;}
 function passToRed(id,speedKmh=passSpeed*3.6){
