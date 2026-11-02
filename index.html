@@ -751,6 +751,19 @@ const resetBeforeTransition=$('reset').onclick;$('reset').onclick=()=>{stopTrans
 // Paused exercise: analyze a proposed blue run against red interception reach.
 let transitionDrag=null;
 const transitionBallSpeed=50/3.6;
+function transitionInterception(red,id,a,b,duration){
+ if(duration<=0)return null;
+ const speed=state.redMaxSpeed/3.6,reach=3.4,vx=(b.x-a.x)/duration,vy=(b.y-a.y)/duration,dx=a.x-red.x,dy=a.y-red.y;
+ const A=vx*vx+vy*vy-speed*speed,B=2*(dx*vx+dy*vy-reach*speed),C=dx*dx+dy*dy-reach*reach;
+ const gap=t=>(A*t+B)*t+C-1e-8;
+ let until=duration;if(A>0)until=clamp(-B/(2*A),0,duration);
+ if(gap(0)>0&&gap(until)>0)return null;
+ let low=0,high=gap(0)<=0?0:until;
+ for(let i=0;i<55;i++){const mid=(low+high)/2;if(gap(mid)>0)low=mid;else high=mid;}
+ const time=high,point=demoMix(a,b,time/duration),distance=dist(red,point);
+ const runEnd=demoMix(red,point,distance>0?Math.max(0,(distance-reach)/distance):0);
+ return{id,time,point,runEnd};
+}
 function transitionPassOption(d,id,origin,target){
  if(id===d.holder)return null;
  const runDistance=dist(origin,target),blueSpeed=state.maxSpeed/3.6,runTime=runDistance/blueSpeed;
@@ -758,7 +771,8 @@ function transitionPassOption(d,id,origin,target){
  let low=0,high=Math.max(runTime,dist(d.editBall,target)/transitionBallSpeed)+1;
  for(let i=0;i<55;i++){const t=(low+high)/2;if(dist(d.editBall,runnerAt(t))>transitionBallSpeed*t)low=t;else high=t;}
  const time=high,receive=runnerAt(time);
- return{id,origin:{...origin},target:{...target},receive,time,runTime,possible:time>.05&&demoPassUncatchable(d.editReds,d.editBall,receive,time)};
+ const interceptors=d.editReds.map((red,id)=>transitionInterception(red,id,d.editBall,receive,time)).filter(Boolean);
+ return{id,origin:{...origin},target:{...target},receive,time,runTime,interceptors,possible:time>.05&&interceptors.length===0};
 }
 function updateTransitionPreview(){const d=transitionDemo;if(d?.interactive&&d.preview)d.preview=transitionPassOption(d,d.preview.id,d.preview.origin,d.editPositions[d.preview.id]);if(d?.interactive)d.editDirty=true;}
 function moveTransitionPlayer(id,q,origin){
@@ -771,7 +785,7 @@ function renderTransitionInteractive(d){
  if(d.editRendered&&!d.editDirty)return;d.editRendered=true;d.editDirty=false;
  const root=$('transitionLayer');root.replaceChildren();
  const p=d.preview;
- const message=!p?(d.firstPass?'Erster Pass angekommen · Blaue Spieler verschieben.':'Ball gesichert · Blaue Spieler verschieben.'):p.possible?'Pass möglich · Ball '+p.time.toFixed(1)+' s · Blau '+Math.min(p.time,p.runTime).toFixed(1)+' s':'Kein sicherer Pass · Rot kann den Ball erreichen.';
+ const message=!p?(d.firstPass?'Erster Pass angekommen · Blaue Spieler verschieben.':'Ball gesichert · Blaue Spieler verschieben.'):p.possible?'Pass möglich · Ball '+p.time.toFixed(1)+' s · Blau '+Math.min(p.time,p.runTime).toFixed(1)+' s':'Kein sicherer Pass · '+p.interceptors.length+' rote Spieler können abfangen.';
  if($('transitionStatus').textContent!==message)$('transitionStatus').textContent=message;
  if(p){
   el('line',{x1:p.origin.x,y1:p.origin.y,x2:p.target.x,y2:p.target.y,stroke:'#8ccaff','stroke-width':'.25','stroke-dasharray':'.5 .7','pointer-events':'none'},root);
@@ -783,6 +797,14 @@ function renderTransitionInteractive(d){
    el('animateMotion',{path,dur:Math.max(.5,p.time)+'s',repeatCount:'indefinite',rotate:'auto'},arrow);
    el('circle',{cx:p.receive.x,cy:p.receive.y,r:1,fill:'none',stroke:'#d9f994','stroke-width':'.25','pointer-events':'none'},root);
   }
+ }
+ if(p)for(const hit of p.interceptors){
+  const red=d.editReds[hit.id];
+  el('circle',{cx:red.x,cy:red.y,r:2.65,fill:'none',stroke:'#ffbd70','stroke-width':'.5','pointer-events':'none','data-interceptor':hit.id},root);
+  el('line',{x1:red.x,y1:red.y,x2:hit.runEnd.x,y2:hit.runEnd.y,stroke:'#ffbd70','stroke-width':'.4','stroke-dasharray':'.8 .6','pointer-events':'none','data-interception-run':hit.id},root);
+  const angle=Math.atan2(hit.point.y-red.y,hit.point.x-red.x)*180/Math.PI;
+  el('path',{d:'M 0 0 L -1.4 -.7 L -1.4 .7 Z',transform:'translate('+hit.runEnd.x+' '+hit.runEnd.y+') rotate('+angle+')',fill:'#ffbd70','pointer-events':'none'},root);
+  el('circle',{cx:hit.point.x,cy:hit.point.y,r:.65,fill:'#ffbd70','pointer-events':'none'},root);
  }
  const draw=(q,team,id)=>{
   const g=el('g',{transform:`translate(${q.x} ${q.y})`,'pointer-events':team==='blue'?'all':'none',class:team==='blue'?'transition-edit-player':'',tabindex:team==='blue'?0:-1,role:'button','aria-label':(team==='blue'?'Blau ':'Rot ')+playerLabel(team,id)+(team==='blue'?' verschieben':'')},root);
