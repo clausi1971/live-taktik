@@ -221,6 +221,18 @@ function raiseBlueFullbacks(players,spaceTargets=false){
   }
  }
 }
+function keepBlueCentrebacksInside(players){
+ const count=formations[state.blueFormation][0];if(count<4||players.length<11)return;
+ const gaps=Array.from({length:count-1},(_,i)=>i===0||i===count-2?4:minimumBlueDistance+.001),required=gaps.reduce((a,b)=>a+b,0),bounds=ballSideBounds();
+ let low=Math.min(67,bounds.left+3),high=Math.max(1,bounds.right-3);if(high-low<required){low=1;high=67;}
+ let left=clamp(players[1].x,low,high-required),right=clamp(players[count].x,left+required,high);
+ players[1].x=left;players[count].x=right;
+ const xs=Array.from({length:count},(_,i)=>players[i+1].x);xs[0]=left;xs[count-1]=right;
+ let prefix=0;for(let i=1;i<count-1;i++){prefix+=gaps[i-1];const remaining=gaps.slice(i).reduce((a,b)=>a+b,0);xs[i]=clamp(xs[i],left+prefix,right-remaining);}
+ for(let i=1;i<count-1;i++)xs[i]=Math.max(xs[i],xs[i-1]+gaps[i-1]);
+ for(let i=count-2;i>0;i--)xs[i]=Math.min(xs[i],xs[i+1]-gaps[i]);
+ for(let i=0;i<count;i++)players[i+1].x=xs[i];
+}
 function needsStrikerHorizontalGap(a,b){return dist(a,b)<=4+1e-8;}
 function spaceBlueStrikers(players,spaceTargets=false){
  const front=formations[state.blueFormation].length-1,ids=players.map((p,id)=>id&&(spaceTargets?p.row:(targets[id]?.row??p.row))===front?id:0).filter(Boolean).sort((a,b)=>players[a].x-players[b].x||a-b);
@@ -352,6 +364,7 @@ function calculate(){
  result[0]=goalkeeperTarget(result.slice(1));
  separateBluePositions(result,true);
  raiseBlueFullbacks(result,true);
+ keepBlueCentrebacksInside(result);
  spaceBlueStrikers(result,true);
  keep4231StrikerAhead(result);
  const seam=placeStrikerInSeam(result,strikerIds,lanes);
@@ -415,7 +428,7 @@ function refresh(){
  parts.push('Die weiteren blauen Stürmer stellen ballnah einen erreichbaren Passweg zu. Die Rollen bleiben während derselben Passsituation stabil.');
  parts.push('Der jeweils ballnähere blaue Stürmer besetzt die Schnittstelle zwischen den roten Innenverteidigern, etwa 3 m vor deren Linie auf der Ballseite.');
  parts.push('Für Zielpositionen gilt: Kommt ein blauer Stürmer in den Umkreis von 0 bis einschließlich 4 m eines anderen, werden die Ziele horizontal auf mindestens 6 m Abstand auseinandergerückt. Während des Laufens zum Ziel ignorieren alle blauen Spieler die Abstandsregeln untereinander. Sie dürfen sich kreuzen und näherkommen. Höhen- und Abstandsregeln zwischen blauen Spielern werden ausschließlich für die Zielpositionen berechnet.');
- parts.push('In Vierer- und Fünferketten stehen die blauen Außenverteidiger mindestens 2 m höher als ihr direkt benachbarter Innenverteidiger.');
+ parts.push('In Vierer- und Fünferketten stehen die blauen Außenverteidiger mindestens 2 m höher als ihr direkt benachbarter Innenverteidiger. Die benachbarten IV-Ziele bleiben jeweils mindestens 4 m seitlich nach innen versetzt zum LV bzw. RV. Diese Abstände werden während des Laufens nicht erzwungen.');
  parts.push('Rote Ketten bleiben in ihrer Reihenfolge und halten in Spielrichtung mindestens 4 m Abstand zur benachbarten Kette.');
  parts.push('Der Ball bewegt sich im Bereich aller roten Mittelfeldspieler und dockt nur dort an. Beim 4-2-3-1 gehören beide Sechser und die drei offensiven Mittelfeldspieler dazu.');
  parts.push('Alle blauen Spieler einschließlich Torhüter bleiben mindestens 10 m vor der eigenen Torauslinie.');
