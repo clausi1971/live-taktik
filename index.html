@@ -290,6 +290,24 @@ function keep4231StrikerAhead(players){
  const midfieldLine=Math.min(players[7].y,players[8].y,players[9].y);
  players[10].y=Math.min(players[10].y,clamp(midfieldLine-3,0,95));
 }
+function position4231ZOM(result,lanes){
+ if(state.blueFormation!=='4-2-3-1'||state.manualBlue[8])return;
+ const id=8,ball=state.ball,a=result[id],front=Math.max(0,Math.min(result[5].y,result[6].y)-3),bounds=ballSideBounds();
+ let best=null;
+ for(let red=1;red<=formations[state.redFormation][0];red++){
+  const receiver=state.reds[red],length=dist(ball,receiver);if(length<1)continue;
+  for(let step=1;step<100;step++){
+   const t=step/100,p={x:ball.x+(receiver.x-ball.x)*t,y:ball.y+(receiver.y-ball.y)*t};
+   if(p.y>front||p.y<1||p.y>95||p.x<Math.max(1,bounds.left+3)||p.x>Math.min(67,bounds.right-3))continue;
+   if(result.some((q,j)=>j!==id&&dist(q,p)<minimumBlueDistance+.05))continue;
+   const score=dist(a,p)*.35+Math.abs(dist(ball,p)-12)+ (lanes.some(l=>l.receiver===receiver)?4:0);
+   if(!best||score<best.score)best={...p,receiver,red,score};
+  }
+ }
+ if(best){result[id]={...a,x:best.x,y:best.y};lanes.push({id,receiver:best.receiver});assignmentNotes[id]='Vor der ZDM-Kette den Passweg zur roten Abwehr schließen';}
+ else{result[id]={...a,y:Math.min(a.y,front)};assignmentNotes[id]='Vor der ZDM-Kette bleiben und Passwege zur roten Abwehr sichern';}
+ delete assignments[id];roles[id]='Passweg schließen';
+}
 function strikerRoleKey(){return state.blueFormation+'|'+state.redFormation+'|'+(ballPass?.to??state.owner)+'|'+(state.ball.x<34?'left':'right');}
 function nearestBlueStriker(){
  if(lastReport.seam?.key===strikerRoleKey()&&!state.manualBlue[lastReport.seam.id])return lastReport.seam.id;
@@ -341,10 +359,10 @@ function calculate(){
   for(let j=0;j<count;j++){result.push({x,y,row,lane:j});x+=gaps[j]||0;}
  });
  const allStrikerIds=result.map((p,id)=>id&&p.row===rows.length-1?id:0).filter(Boolean);
- const anchors=result.map(p=>({...p})),order=anchors.map((p,id)=>({...p,id})).filter(p=>p.id&&!allStrikerIds.includes(p.id)).sort((a,b)=>dist(blue[a.id]||a,ball)-dist(blue[b.id]||b,ball));
+ const anchors=result.map(p=>({...p})),order=anchors.map((p,id)=>({...p,id})).filter(p=>p.id&&!allStrikerIds.includes(p.id)&&!(state.blueFormation==='4-2-3-1'&&p.id===8)).sort((a,b)=>dist(blue[a.id]||a,ball)-dist(blue[b.id]||b,ball));
  const presser=order[0].id,autoPress=state.p14&&dist(blue[presser]||anchors[presser],ball)<=14,press=state.pressure||state.double||autoPress;
  const strikerIds=allStrikerIds;
- const reserved=new Set([presser]);strikerIds.forEach(id=>reserved.add(id));roles={};assignmentNotes={};const floating={};
+ const reserved=new Set([presser]);strikerIds.forEach(id=>reserved.add(id));if(state.blueFormation==='4-2-3-1')reserved.add(8);roles={};assignmentNotes={};const floating={};
  if(press)roles[presser]=state.pressure?'Druck':'Attackieren';else roles[presser]='Ballraum sichern';
  let doubler=null;if(state.double){doubler=order[1].id;reserved.add(doubler);roles[doubler]='Doppeln';}
  const supports=[];
@@ -399,6 +417,8 @@ function calculate(){
  spaceBlueStrikers(result,true);
  keep4231StrikerAhead(result);
  const seam=placeStrikerInSeam(result,strikerIds,lanes);
+ position4231ZOM(result,lanes);
+ keep4231StrikerAhead(result);
  limitBlueDiscOverlap(result);
  
  
