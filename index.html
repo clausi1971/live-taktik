@@ -740,7 +740,7 @@ function stopTransitionDemo(){if(!transitionDemo)return;transitionDrag=null;tran
 function demoReceiverAt(d,t){return demoMix(d.bs[d.receiver],d.offer,(t-2)/4);}
 function renderTransitionDemo(dt){
  const d=transitionDemo;if(!d)return;
- if(d.interactive){advanceTransitionPass(d,dt);renderTransitionInteractive(d);return;}
+ if(d.interactive){advanceTransitionPass(d,dt);if(transitionDemo===d)renderTransitionInteractive(d);return;}
  if(!d.paused){d.time=Math.min(6,d.time+dt);if(d.time>=6){
  d.interactive=true;d.paused=true;d.editPositions=demoBlueAt(d,6);d.editReds=d.rs.map((p,id)=>demoRedAt(p,id,6));d.editBall={...(d.firstPass?d.offer:d.win)};d.holder=d.firstPass?d.receiver:d.winner;
  renderTransitionInteractive(d);return;
@@ -788,16 +788,22 @@ function transitionPassOption(d,id,origin,target){
 function startTransitionPass(d){
  const p=d.preview;if(!p||d.play)return false;
  const checked=transitionPassOption(d,p.id,p.origin,d.editPositions[p.id]);
- if(!checked?.possible)return false;
- d.play={...checked,startBall:{...d.editBall},elapsed:0};
+ if(!checked||checked.flightTime<=.05)return false;
+ const interception=[...checked.interceptors].sort((a,b)=>a.time-b.time||a.id-b.id)[0]||null;
+ d.play={...checked,interception,redOrigin:interception?{...d.editReds[interception.id]}:null,startBall:{...d.editBall},elapsed:0};
  d.editPositions[p.id]={...checked.origin};d.preview=null;d.editDirty=true;return true;
 }
 function advanceTransitionPass(d,dt){
  const p=d.play;if(!p)return;
- p.elapsed=Math.min(p.time,p.elapsed+Math.max(0,dt));
+ const end=p.interception?.time??p.time;
+ p.elapsed=Math.min(end,p.elapsed+Math.max(0,dt));
  d.editPositions[p.id]=demoMix(p.origin,p.target,p.runTime>0?p.elapsed/p.runTime:1);
  d.editBall=demoMix(p.startBall,p.receive,(p.elapsed-p.launchDelay)/p.flightTime);d.editDirty=true;
- if(p.elapsed>=p.time){d.editPositions[p.id]={...p.receive};d.editBall={...p.receive};d.holder=p.id;d.play=null;}
+ if(p.interception){const hit=p.interception;d.editReds[hit.id]=demoMix(p.redOrigin,hit.runEnd,hit.time>0?p.elapsed/hit.time:1);}
+ if(p.elapsed>=end){
+  if(p.interception){const id=p.interception.id;d.play=null;regainTransitionBall(id);}
+  else{d.editPositions[p.id]={...p.receive};d.editBall={...p.receive};d.holder=p.id;d.play=null;}
+ }
 }
 function finishTransitionDrag(e){
  if(!transitionDrag||transitionDrag.pointer!==e.pointerId)return;
@@ -830,18 +836,19 @@ function renderTransitionInteractive(d){
  if(d.editRendered&&!d.editDirty)return;d.editRendered=true;d.editDirty=false;
  const root=$('transitionLayer');root.replaceChildren();
  const p=d.preview;
- const message=d.play?(d.play.elapsed<d.play.launchDelay?'Blau startet – Pass folgt':'Pass in den Lauf · Ball und Blau unterwegs'):!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.flightTime.toFixed(1)+' s · Lauf '+p.runTime.toFixed(1)+' s':p.flightTime<=.05?'Ziel weiter vom Ball wählen':'Kein sicherer Pass · '+p.interceptors.length+' rote Spieler können abfangen.';
+ const message=d.play?(d.play.interception?'Riskanter Pass · Rot läuft zum Ball':d.play.elapsed<d.play.launchDelay?'Blau startet – Pass folgt':'Pass in den Lauf · Ball und Blau unterwegs'):!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.flightTime.toFixed(1)+' s · Lauf '+p.runTime.toFixed(1)+' s':p.flightTime<=.05?'Ziel weiter vom Ball wählen':'Riskanter Pass · Loslassen: Rot kann abfangen';
  if($('transitionStatus').textContent!==message)$('transitionStatus').textContent=message;
  if(d.play){const run=d.play;el('line',{x1:run.origin.x,y1:run.origin.y,x2:run.target.x,y2:run.target.y,stroke:'#8ccaff','stroke-width':'.3','stroke-dasharray':'.6 .7','pointer-events':'none'},root);}
+ if(d.play?.interception){const hit=d.play.interception,red=d.editReds[hit.id];el('line',{x1:d.play.redOrigin.x,y1:d.play.redOrigin.y,x2:hit.runEnd.x,y2:hit.runEnd.y,stroke:'#ffbd70','stroke-width':'.4','stroke-dasharray':'.8 .6','pointer-events':'none'},root);el('circle',{cx:red.x,cy:red.y,r:2.6,fill:'none',stroke:'#ffbd70','stroke-width':'.5','pointer-events':'none'},root);}
  if(p){
   el('line',{x1:p.origin.x,y1:p.origin.y,x2:p.target.x,y2:p.target.y,stroke:'#8ccaff','stroke-width':'.25','stroke-dasharray':'.5 .7','pointer-events':'none'},root);
-  if(p.possible){
+  if(p.flightTime>.05){
    const path=`M ${d.editBall.x} ${d.editBall.y} L ${p.receive.x} ${p.receive.y}`;
-   const line=el('path',{d:path,fill:'none',stroke:'#d9f994','stroke-width':'.45','stroke-dasharray':'1.2 .9','pointer-events':'none'},root);
+   const line=el('path',{d:path,fill:'none',stroke:p.possible?'#d9f994':'#ff7d70','stroke-width':'.45','stroke-dasharray':'1.2 .9','pointer-events':'none'},root);
    el('animate',{attributeName:'stroke-dashoffset',from:'2.1',to:'0',dur:'.6s',repeatCount:'indefinite'},line);
-   const arrow=el('path',{d:'M 1 0 L -1.1 -.75 L -1.1 .75 Z',fill:'#edffb2','pointer-events':'none'},root);
+   const arrow=el('path',{d:'M 1 0 L -1.1 -.75 L -1.1 .75 Z',fill:p.possible?'#edffb2':'#ff7d70','pointer-events':'none'},root);
    el('animateMotion',{path,dur:Math.max(.5,p.flightTime)+'s',repeatCount:'indefinite',rotate:'auto'},arrow);
-   el('circle',{cx:p.receive.x,cy:p.receive.y,r:1,fill:'none',stroke:'#d9f994','stroke-width':'.25','pointer-events':'none'},root);
+   el('circle',{cx:p.receive.x,cy:p.receive.y,r:1,fill:'none',stroke:p.possible?'#d9f994':'#ff7d70','stroke-width':'.25','pointer-events':'none'},root);
   }
  }
  if(p)for(const hit of p.interceptors){
