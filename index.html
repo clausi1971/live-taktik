@@ -690,7 +690,7 @@ function stopTransitionDemo(){if(!transitionDemo)return;transitionDrag=null;tran
 function demoReceiverAt(d,t){return demoMix(d.bs[d.receiver],d.offer,(t-2)/4);}
 function renderTransitionDemo(dt){
  const d=transitionDemo;if(!d)return;
- if(d.interactive){renderTransitionInteractive(d);return;}
+ if(d.interactive){advanceTransitionPass(d,dt);renderTransitionInteractive(d);return;}
  if(!d.paused){d.time=Math.min(6,d.time+dt);if(d.time>=6){
  d.interactive=true;d.paused=true;d.editPositions=demoBlueAt(d,6);d.editReds=d.rs.map((p,id)=>demoRedAt(p,id,6));d.editBall={...(d.firstPass?d.offer:d.win)};d.holder=d.firstPass?d.receiver:d.winner;
  renderTransitionInteractive(d);return;
@@ -734,9 +734,28 @@ function transitionPassOption(d,id,origin,target){
  const interceptors=d.editReds.map((red,id)=>transitionInterception(red,id,d.editBall,receive,time)).filter(Boolean);
  return{id,origin:{...origin},target:{...target},receive,time,runTime,interceptors,possible:time>.05&&interceptors.length===0};
 }
+function startTransitionPass(d){
+ const p=d.preview;if(!p||d.play)return false;
+ const checked=transitionPassOption(d,p.id,p.origin,d.editPositions[p.id]);
+ if(!checked?.possible)return false;
+ d.play={...checked,startBall:{...d.editBall},elapsed:0};
+ d.editPositions[p.id]={...checked.origin};d.preview=null;d.editDirty=true;return true;
+}
+function advanceTransitionPass(d,dt){
+ const p=d.play;if(!p)return;
+ p.elapsed=Math.min(p.time,p.elapsed+Math.max(0,dt));
+ d.editPositions[p.id]=demoMix(p.origin,p.target,p.runTime>0?p.elapsed/p.runTime:1);
+ d.editBall=demoMix(p.startBall,p.receive,p.elapsed/p.time);d.editDirty=true;
+ if(p.elapsed>=p.time){d.editPositions[p.id]={...p.receive};d.editBall={...p.receive};d.holder=p.id;d.play=null;}
+}
+function finishTransitionDrag(e){
+ if(!transitionDrag||transitionDrag.pointer!==e.pointerId)return;
+ const v=transitionDrag;transitionDrag=null;const d=transitionDemo;
+ if(e.type==='pointerup'&&d?.interactive&&dist(v.origin,d.editPositions[v.id])>.1)startTransitionPass(d);
+}
 function updateTransitionPreview(){const d=transitionDemo;if(d?.interactive&&d.preview)d.preview=transitionPassOption(d,d.preview.id,d.preview.origin,d.editPositions[d.preview.id]);if(d?.interactive)d.editDirty=true;}
 function moveTransitionPlayer(id,q,origin){
- const d=transitionDemo;if(!d?.interactive)return;
+ const d=transitionDemo;if(!d?.interactive||d.play)return;
  d.editDirty=true;d.editPositions[id]={x:clamp(q.x,2,66),y:clamp(q.y,3,102)};
  if(id===d.holder){d.editBall={...d.editPositions[id]};d.preview=null;}
  else d.preview=transitionPassOption(d,id,origin,d.editPositions[id]);
@@ -745,8 +764,9 @@ function renderTransitionInteractive(d){
  if(d.editRendered&&!d.editDirty)return;d.editRendered=true;d.editDirty=false;
  const root=$('transitionLayer');root.replaceChildren();
  const p=d.preview;
- const message=!p?'Blau verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.time.toFixed(1)+' s · Blau '+Math.min(p.time,p.runTime).toFixed(1)+' s':'Kein sicherer Pass · '+p.interceptors.length+' rote Spieler können abfangen.';
+ const message=d.play?'Pass in den Lauf · Ball und Blau unterwegs':!p?'Blau verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.time.toFixed(1)+' s · Blau '+Math.min(p.time,p.runTime).toFixed(1)+' s':'Kein sicherer Pass · '+p.interceptors.length+' rote Spieler können abfangen.';
  if($('transitionStatus').textContent!==message)$('transitionStatus').textContent=message;
+ if(d.play){const run=d.play;el('line',{x1:run.origin.x,y1:run.origin.y,x2:run.target.x,y2:run.target.y,stroke:'#8ccaff','stroke-width':'.3','stroke-dasharray':'.6 .7','pointer-events':'none'},root);}
  if(p){
   el('line',{x1:p.origin.x,y1:p.origin.y,x2:p.target.x,y2:p.target.y,stroke:'#8ccaff','stroke-width':'.25','stroke-dasharray':'.5 .7','pointer-events':'none'},root);
   if(p.possible){
@@ -772,15 +792,15 @@ function renderTransitionInteractive(d){
   el('text',{'text-anchor':'middle','dominant-baseline':'central','font-size':'1.6',fill:'white','font-weight':'700','pointer-events':'none'},g).textContent=playerLabel(team,id);
   if(team==='blue'){
    if(d.editFocus===id){g.focus?.();d.editFocus=null;}
-   g.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();const q=point(e),origin={...d.editPositions[id]};transitionDrag={id,pointer:e.pointerId,origin,dx:origin.x-q.x,dy:origin.y-q.y};d.preview=transitionPassOption(d,id,origin,origin);d.editDirty=true;$('pitch').setPointerCapture(e.pointerId);});
-   g.addEventListener('keydown',e=>{const keys={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]},v=keys[e.key];if(!v)return;e.preventDefault();d.editFocus=id;const origin={...d.editPositions[id]};moveTransitionPlayer(id,{x:origin.x+v[0],y:origin.y+v[1]},origin);});
+   g.addEventListener('pointerdown',e=>{if(e.button!==0||d.play)return;e.preventDefault();const q=point(e),origin={...d.editPositions[id]};transitionDrag={id,pointer:e.pointerId,origin,dx:origin.x-q.x,dy:origin.y-q.y};d.preview=transitionPassOption(d,id,origin,origin);d.editDirty=true;$('pitch').setPointerCapture(e.pointerId);});
+   g.addEventListener('keydown',e=>{if(d.play)return;const keys={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]},v=keys[e.key];if(!v)return;e.preventDefault();d.editFocus=id;const origin={...d.editPositions[id]};moveTransitionPlayer(id,{x:origin.x+v[0],y:origin.y+v[1]},origin);});
   }
  };
  d.editReds.forEach((q,id)=>draw(q,'red',id));d.editPositions.forEach((q,id)=>draw(q,'blue',id));
  el('circle',{cx:d.editBall.x,cy:d.editBall.y,r:1.05,fill:'#fff',stroke:'#e8d37b','stroke-width':'.5','pointer-events':'none'},root);
 }
 $('pitch').addEventListener('pointermove',e=>{if(!transitionDrag||e.pointerId!==transitionDrag.pointer)return;e.preventDefault();const q=point(e),v=transitionDrag;moveTransitionPlayer(v.id,{x:q.x+v.dx,y:q.y+v.dy},v.origin);});
-for(const type of ['pointerup','pointercancel','lostpointercapture'])$('pitch').addEventListener(type,e=>{if(transitionDrag?.pointer===e.pointerId)transitionDrag=null;});
+for(const type of ['pointerup','pointercancel','lostpointercapture'])$('pitch').addEventListener(type,finishTransitionDrag);
 </script></body></html>
 
 
