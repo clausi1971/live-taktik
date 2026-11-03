@@ -761,28 +761,29 @@ const resetBeforeTransition=$('reset').onclick;$('reset').onclick=()=>{stopTrans
 // Paused exercise: analyze a proposed blue run against red interception reach.
 let transitionDrag=null;
 const transitionBallSpeed=50/3.6;
-function transitionInterception(red,id,a,b,duration){
+function transitionInterception(red,id,a,b,duration,launchDelay=0){
  if(duration<=0)return null;
- const speed=state.redMaxSpeed/3.6,reach=3.4,vx=(b.x-a.x)/duration,vy=(b.y-a.y)/duration,dx=a.x-red.x,dy=a.y-red.y;
+ const speed=state.redMaxSpeed/3.6,reach=3.4+speed*launchDelay,vx=(b.x-a.x)/duration,vy=(b.y-a.y)/duration,dx=a.x-red.x,dy=a.y-red.y;
  const A=vx*vx+vy*vy-speed*speed,B=2*(dx*vx+dy*vy-reach*speed),C=dx*dx+dy*dy-reach*reach;
  const gap=t=>(A*t+B)*t+C-1e-8;
  let until=duration;if(A>0)until=clamp(-B/(2*A),0,duration);
  if(gap(0)>0&&gap(until)>0)return null;
  let low=0,high=gap(0)<=0?0:until;
  for(let i=0;i<55;i++){const mid=(low+high)/2;if(gap(mid)>0)low=mid;else high=mid;}
- const time=high,point=demoMix(a,b,time/duration),distance=dist(red,point);
- const runEnd=demoMix(red,point,distance>0?Math.max(0,(distance-reach)/distance):0);
+ const waitCatch=Math.max(0,(dist(red,a)-3.4)/speed);
+ const duringWait=launchDelay>0&&waitCatch<=launchDelay;
+ const time=duringWait?waitCatch:launchDelay+high,point=duringWait?{...a}:demoMix(a,b,high/duration),distance=dist(red,point);
+ const runEnd=demoMix(red,point,distance>0?Math.max(0,(distance-3.4)/distance):0);
  return{id,time,point,runEnd};
 }
 function transitionPassOption(d,id,origin,target){
  if(id===d.holder)return null;
  const runDistance=dist(origin,target),blueSpeed=state.maxSpeed/3.6,runTime=runDistance/blueSpeed;
- const runnerAt=t=>demoMix(origin,target,runTime>0?t/runTime:1);
- let low=0,high=Math.max(runTime,dist(d.editBall,target)/transitionBallSpeed)+1;
- for(let i=0;i<55;i++){const t=(low+high)/2;if(dist(d.editBall,runnerAt(t))>transitionBallSpeed*t)low=t;else high=t;}
- const time=high,receive=runnerAt(time);
- const interceptors=d.editReds.map((red,id)=>transitionInterception(red,id,d.editBall,receive,time)).filter(Boolean);
- return{id,origin:{...origin},target:{...target},receive,time,runTime,interceptors,possible:time>.05&&interceptors.length===0};
+ // The dragged destination is the reception point, rather than an early interception of the run.
+ const receive={...target},flightTime=dist(d.editBall,receive)/transitionBallSpeed;
+ const launchDelay=Math.max(0,runTime-flightTime),time=launchDelay+flightTime;
+ const interceptors=d.editReds.map((red,id)=>transitionInterception(red,id,d.editBall,receive,flightTime,launchDelay)).filter(Boolean);
+ return{id,origin:{...origin},target:{...target},receive,time,flightTime,launchDelay,runTime,interceptors,possible:flightTime>.05&&interceptors.length===0};
 }
 function startTransitionPass(d){
  const p=d.preview;if(!p||d.play)return false;
@@ -795,7 +796,7 @@ function advanceTransitionPass(d,dt){
  const p=d.play;if(!p)return;
  p.elapsed=Math.min(p.time,p.elapsed+Math.max(0,dt));
  d.editPositions[p.id]=demoMix(p.origin,p.target,p.runTime>0?p.elapsed/p.runTime:1);
- d.editBall=demoMix(p.startBall,p.receive,p.elapsed/p.time);d.editDirty=true;
+ d.editBall=demoMix(p.startBall,p.receive,(p.elapsed-p.launchDelay)/p.flightTime);d.editDirty=true;
  if(p.elapsed>=p.time){d.editPositions[p.id]={...p.receive};d.editBall={...p.receive};d.holder=p.id;d.play=null;}
 }
 function finishTransitionDrag(e){
@@ -829,7 +830,7 @@ function renderTransitionInteractive(d){
  if(d.editRendered&&!d.editDirty)return;d.editRendered=true;d.editDirty=false;
  const root=$('transitionLayer');root.replaceChildren();
  const p=d.preview;
- const message=d.play?'Pass in den Lauf · Ball und Blau unterwegs':!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.time.toFixed(1)+' s · Blau '+Math.min(p.time,p.runTime).toFixed(1)+' s':'Kein sicherer Pass · '+p.interceptors.length+' rote Spieler können abfangen.';
+ const message=d.play?(d.play.elapsed<d.play.launchDelay?'Blau startet – Pass folgt':'Pass in den Lauf · Ball und Blau unterwegs'):!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.flightTime.toFixed(1)+' s · Lauf '+p.runTime.toFixed(1)+' s':p.flightTime<=.05?'Ziel weiter vom Ball wählen':'Kein sicherer Pass · '+p.interceptors.length+' rote Spieler können abfangen.';
  if($('transitionStatus').textContent!==message)$('transitionStatus').textContent=message;
  if(d.play){const run=d.play;el('line',{x1:run.origin.x,y1:run.origin.y,x2:run.target.x,y2:run.target.y,stroke:'#8ccaff','stroke-width':'.3','stroke-dasharray':'.6 .7','pointer-events':'none'},root);}
  if(p){
@@ -839,7 +840,7 @@ function renderTransitionInteractive(d){
    const line=el('path',{d:path,fill:'none',stroke:'#d9f994','stroke-width':'.45','stroke-dasharray':'1.2 .9','pointer-events':'none'},root);
    el('animate',{attributeName:'stroke-dashoffset',from:'2.1',to:'0',dur:'.6s',repeatCount:'indefinite'},line);
    const arrow=el('path',{d:'M 1 0 L -1.1 -.75 L -1.1 .75 Z',fill:'#edffb2','pointer-events':'none'},root);
-   el('animateMotion',{path,dur:Math.max(.5,p.time)+'s',repeatCount:'indefinite',rotate:'auto'},arrow);
+   el('animateMotion',{path,dur:Math.max(.5,p.flightTime)+'s',repeatCount:'indefinite',rotate:'auto'},arrow);
    el('circle',{cx:p.receive.x,cy:p.receive.y,r:1,fill:'none',stroke:'#d9f994','stroke-width':'.25','pointer-events':'none'},root);
   }
  }
