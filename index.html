@@ -114,8 +114,8 @@ let effectiveDepthOffset=0,depthPanelOpen=true,previousAssignments={},previousSy
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function el(tag,attrs,parent){let n=document.createElementNS(NS,tag);for(let k in attrs)n.setAttribute(k,attrs[k]);if(parent)parent.append(n);return n;}
 let startLayoutSignature=null;
-const startRedPositions=[{"x":34,"y":5},{"x":8,"y":27},{"x":25.33,"y":27},{"x":42.67,"y":27},{"x":60,"y":27},{"x":8,"y":48.5},{"x":34,"y":48.5},{"x":60,"y":48.5},{"x":22,"y":67},{"x":34,"y":67},{"x":46,"y":67}];
-const startBluePositions=[{"x":34.38,"y":92,"row":-1},{"x":20.5,"y":65,"row":0},{"x":31.7,"y":67,"row":0},{"x":43.7,"y":67,"row":0},{"x":53,"y":65,"row":0},{"x":35.75,"y":56.6,"row":1},{"x":51.3,"y":50.45,"row":1},{"x":12.9,"y":46.8,"row":2},{"x":26.7,"y":42.1,"row":2},{"x":44,"y":35.2,"row":2},{"x":34,"y":30,"row":3}];
+const startRedPositions=[{"x":34,"y":5},{"x":8,"y":27},{"x":25.33,"y":27},{"x":42.67,"y":27},{"x":60,"y":27},{"x":5.1,"y":45.2},{"x":34,"y":48.5},{"x":61,"y":45},{"x":22,"y":67},{"x":34,"y":67},{"x":46,"y":67}];
+const startBluePositions=[{"x":34.38,"y":92.2,"row":-1},{"x":20.5,"y":65.1,"row":0},{"x":31.7,"y":67.2,"row":0},{"x":43.7,"y":67.2,"row":0},{"x":53.1,"y":65.1,"row":0},{"x":35.7,"y":56.6,"row":1},{"x":51.3,"y":48.1,"row":1},{"x":12.9,"y":44.7,"row":2},{"x":26.7,"y":42.1,"row":2},{"x":44.1,"y":35.2,"row":2},{"x":34,"y":30,"row":3}];
 function layoutSignature(){return JSON.stringify([state.redFormation,state.blueFormation,state.reds,state.ball,state.owner,state.spacing,state.depthOffset,state.pressure,state.cover,state.double,state.p12,state.p13,state.p14,state.manualBlue]);}
 function applyStartLayout(){
  ballPass=null;state.redFormation='4-3-3';state.blueFormation='4-2-3-1';state.owner=6;state.manualBlue={};state.reds=startRedPositions.map(p=>({...p}));dock();blue=startBluePositions.map(p=>({...p,vx:0,vy:0}));lastTime=0;previousAssignments={};handoverNotice='';lastReport={};startLayoutSignature=layoutSignature();targets=calculate();blue=targets.map(p=>({...p,vx:0,vy:0}));
