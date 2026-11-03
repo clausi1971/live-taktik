@@ -109,6 +109,7 @@ const formations={'4-4-2':[4,4,2],'4-2-3-1':[4,2,3,1],'4-3-3':[4,3,3],'3-5-2':[3
 const state={redFormation:'4-3-3',blueFormation:'4-2-3-1',spacing:12,maxSpeed:21,redMaxSpeed:21,depthOffset:-4,pressure:true,cover:false,double:false,explanations:true,highlightChains:true,manualBlue:{},p12:false,p13:false,p14:false,reds:[],owner:7,ball:{x:21,y:51}};
 const passSpeed=11.1; // m/s: representative measured short-pass speed, about 40 km/h.
 let ballPass=null;
+let regainedRedOwner=null;
 let blue=[],targets=[],drag=null,roles={},lastTime=0,assignments={},assignmentNotes={};
 let effectiveDepthOffset=0,depthPanelOpen=true,previousAssignments={},previousSystem='',handoverNotice='',lastReport={};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
@@ -118,13 +119,14 @@ const startRedPositions=[{"x":34,"y":5},{"x":8,"y":27},{"x":25.33,"y":27},{"x":4
 const startBluePositions=[{"x":34.38,"y":92.2,"row":-1},{"x":20.5,"y":65.1,"row":0},{"x":31.7,"y":67.2,"row":0},{"x":43.7,"y":67.2,"row":0},{"x":53.1,"y":65.1,"row":0},{"x":35.7,"y":56.6,"row":1},{"x":51.3,"y":48.1,"row":1},{"x":12.9,"y":44.7,"row":2},{"x":26.7,"y":42.1,"row":2},{"x":44.1,"y":35.2,"row":2},{"x":34,"y":30,"row":3}];
 function layoutSignature(){return JSON.stringify([state.redFormation,state.blueFormation,state.reds,state.ball,state.owner,state.spacing,state.depthOffset,state.pressure,state.cover,state.double,state.p12,state.p13,state.p14,state.manualBlue]);}
 function applyStartLayout(){
- ballPass=null;state.redFormation='4-3-3';state.blueFormation='4-2-3-1';state.owner=6;state.manualBlue={};state.reds=startRedPositions.map(p=>({...p}));dock();blue=startBluePositions.map(p=>({...p,vx:0,vy:0}));lastTime=0;previousAssignments={};handoverNotice='';lastReport={};startLayoutSignature=layoutSignature();targets=calculate();blue=targets.map(p=>({...p,vx:0,vy:0}));
+ ballPass=null;regainedRedOwner=null;state.redFormation='4-3-3';state.blueFormation='4-2-3-1';state.owner=6;state.manualBlue={};state.reds=startRedPositions.map(p=>({...p}));dock();blue=startBluePositions.map(p=>({...p,vx:0,vy:0}));lastTime=0;previousAssignments={};handoverNotice='';lastReport={};startLayoutSignature=layoutSignature();targets=calculate();blue=targets.map(p=>({...p,vx:0,vy:0}));
 }
 function redSetup(){state.reds=[{x:34,y:5}];formations[state.redFormation].forEach((count,row,arr)=>{for(let i=0;i<count;i++)state.reds.push({x:count===1?34:row===arr.length-1?34+(i-(count-1)/2)*12:8+i*52/(count-1),y:27+row*43/(arr.length-1)+(row===arr.length-1?-3:0)});});dock();}
 function redChains(){
  const chains=[[0]];let index=1;for(const count of formations[state.redFormation]){chains.push(Array.from({length:count},()=>index++));}return chains;
 }
 function constrainRedPosition(id,p){
+ if(id===regainedRedOwner)return{x:clamp(p.x,1,67),y:clamp(p.y,1,104)};
  const chains=redChains(),row=chains.findIndex(ids=>ids.includes(id));
  const lower=row?Math.max(...chains[row-1].map(i=>state.reds[i].y))+4:1;
  const upper=row<chains.length-1?Math.min(...chains[row+1].map(i=>state.reds[i].y))-4:104;
@@ -148,7 +150,7 @@ function midfieldBallPosition(wanted){
  for(let j=0;j<hull.length;j++){const a=hull[j],b=hull[(j+1)%hull.length],dx=b.x-a.x,dy=b.y-a.y,t=clamp(((wanted.x-a.x)*dx+(wanted.y-a.y)*dy)/(dx*dx+dy*dy||1),0,1),q={x:a.x+t*dx,y:a.y+t*dy},d=dist(wanted,q);if(d<distance){distance=d;best=q;}}
  return {...best};
 }
-function dock(){ballPass=null;if(!redMidfieldIds().includes(state.owner))state.owner=nearest();const p=state.reds[state.owner];state.ball={x:clamp(p.x+2,0,68),y:clamp(p.y+1,0,105)};}
+function dock(){ballPass=null;if(!redMidfieldIds().includes(state.owner)&&state.owner!==regainedRedOwner)state.owner=nearest();const p=state.reds[state.owner];state.ball={x:clamp(p.x+2,0,68),y:clamp(p.y+1,0,105)};}
 function goalkeeperTarget(field){const deepest=Math.max(...field.map(p=>p.y));return{x:clamp(34+(state.ball.x-34)*.19,26,42),y:Math.min(95,deepest<88.5?deepest+25:Math.max(102,deepest+1)),row:-1};}
 function markPoint(opponent,ball){
  const near=dist(opponent,ball)<20,dx=ball.x-opponent.x;
@@ -583,7 +585,7 @@ function placeBlue(i,p){if(i)p=insideBallSide(p);p=freeBluePosition(p,blue.filte
 $('autoBlue').onclick=()=>{state.manualBlue={};refresh();};$('enableAutoBlue').onclick=()=>{state.manualBlue={};refresh();};
 function nearest(){return redMidfieldIds().map(i=>({i,d:dist(state.reds[i],state.ball)})).sort((a,b)=>a.d-b.d)[0].i;}
 function passToRed(id,speedKmh=passSpeed*3.6){
- if(!redMidfieldIds().includes(id)){$('message').textContent='Bitte einen roten Mittelfeldspieler anklicken: Der Ball bleibt im Mittelfeld.';return;}
+ if(!redMidfieldIds().includes(id)&&id!==state.owner){$('message').textContent='Bitte einen roten Mittelfeldspieler anklicken: Der Ball bleibt im Mittelfeld.';return;}
  state.manualBlue={};if(state.owner===id&&!ballPass){refresh();return;}ballPass={to:id,speed:speedKmh/3.6};refresh();$('message').textContent='Pass zu Rot '+(id+1)+' · '+Math.round(speedKmh)+' km/h.';
 }
 function endDrag(e){if(!drag||e.pointerId!==drag.id)return;if(e.type!=='pointercancel'&&drag.kind==='red'&&!drag.moved){const id=drag.index;drag=null;passToRed(id);return;}if(drag.kind==='ball'){state.owner=nearest();dock();}drag=null;refresh();}
@@ -591,7 +593,7 @@ $('pitch').addEventListener('pointerup',endDrag);$('pitch').addEventListener('po
 function keyMove(e,kind,i){if(kind==='red'&&(e.key==='Enter'||e.key===' ')){e.preventDefault();passToRed(i);return;}let moves={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};if(kind==='ball'&&e.key==='Enter'){state.owner=nearest();dock();refresh();return;}if(!moves[e.key])return;e.preventDefault();let p=kind==='ball'?state.ball:kind==='blue'?{...blue[i]}:{...state.reds[i]},m=moves[e.key],step=e.shiftKey?3:1;p.x=clamp(p.x+m[0]*step,1,67);p.y=clamp(p.y+m[1]*step,1,104);if(kind==='ball'){ballPass=null;state.ball=midfieldBallPosition(p);}if(kind==='blue')placeBlue(i,p);else state.manualBlue={};if(kind==='red'){state.reds[i]=constrainRedPosition(i,p);if(i===state.owner)dock();else state.ball=midfieldBallPosition(state.ball);}refresh();if(kind==='ball')$('owner').textContent='Ball frei · Enter zum Andocken';}
 function changeFormation(team,formation){
  if(!['red','blue'].includes(team)||!Object.hasOwn(formations,formation))return;
- state[team+'Formation']=formation;state.manualBlue={};ballPass=null;blue=[];targets=[];lastTime=0;previousAssignments={};previousSystem='';handoverNotice='';lastReport={};assignments={};assignmentNotes={};startLayoutSignature=null;
+ regainedRedOwner=null;state[team+'Formation']=formation;state.manualBlue={};ballPass=null;blue=[];targets=[];lastTime=0;previousAssignments={};previousSystem='';handoverNotice='';lastReport={};assignments={};assignmentNotes={};startLayoutSignature=null;
  if(state.redFormation==='4-3-3'&&state.blueFormation==='4-2-3-1')applyStartLayout();
  else{const midfield=redMidfieldIds();state.owner=midfield[Math.floor(midfield.length/2)];redSetup();}
  $('redFormation').value=state.redFormation;$('blueFormation').value=state.blueFormation;refresh();
@@ -802,12 +804,25 @@ function finishTransitionDrag(e){
  if(e.type==='pointerup'&&v.team!=='red'&&d?.interactive&&dist(v.origin,d.editPositions[v.id])>.1)startTransitionPass(d);
 }
 function updateTransitionPreview(){const d=transitionDemo;if(d?.interactive&&d.preview)d.preview=transitionPassOption(d,d.preview.id,d.preview.origin,d.editPositions[d.preview.id]);if(d?.interactive)d.editDirty=true;}
+function regainTransitionBall(id){
+ const d=transitionDemo;if(!d?.interactive||d.play)return false;
+ const active=transitionDrag?.team==='red'&&transitionDrag.id===id?{...transitionDrag}:null;
+ state.reds=d.editReds.map(p=>({...p}));
+ blue=d.editPositions.map((p,i)=>({...p,row:d.bs[i].row??targets[i]?.row,vx:0,vy:0}));
+ state.owner=id;regainedRedOwner=id;state.ball={...d.editBall};state.manualBlue={};ballPass=null;startLayoutSignature=null;
+ previousAssignments={};previousSystem='';assignments={};assignmentNotes={};lastReport={};handoverNotice='';
+ stopTransitionDemo();dock();refresh();lastTime=0;
+ // Keep an active red drag working when the exercise hands back to normal play.
+ if(active)drag={kind:'red',index:id,id:active.pointer,startX:0,startY:0,moved:true,dx:active.dx,dy:active.dy};
+ $('message').textContent='Ballgewinn Rot · '+playerLabel('red',id)+' hat den Ball. Blau verteidigt wieder.';
+ return true;
+}
 function moveTransitionPlayer(id,q,origin,team='blue'){
  const d=transitionDemo;if(!d?.interactive||d.play)return;
  d.editDirty=true;const position={x:clamp(q.x,2,66),y:clamp(q.y,3,102)};
- if(team==='red'){d.editReds[id]=position;updateTransitionPreview();return;}
+ if(team==='red'){const previous=d.editReds[id];d.editReds[id]=position;if(demoPointSegment(d.editBall,previous,position)<=2.95){regainTransitionBall(id);return;}updateTransitionPreview();return;}
  d.editPositions[id]=position;
- if(id===d.holder){d.editBall={...d.editPositions[id]};d.preview=null;}
+ if(id===d.holder){d.editBall={...d.editPositions[id]};d.preview=null;const red=d.editReds.findIndex(p=>dist(p,d.editBall)<=2.95);if(red>=0)regainTransitionBall(red);}
  else d.preview=transitionPassOption(d,id,origin,d.editPositions[id]);
 }
 function renderTransitionInteractive(d){
