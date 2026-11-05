@@ -651,8 +651,8 @@ $('pitch').addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)re
 function pauseDefense(){state.defensePaused=true;state.coachingPrompt=true;blue.forEach(p=>{p.vx=0;p.vy=0;});state.manualBlue=Object.fromEntries(blue.map((p,id)=>[id,{x:p.x,y:p.y}]));updateCoachingControls();}
 function updateCoachingControls(){
  const manual=state.defensePaused||state.coachingOff||state.coachingPrompt||Object.keys(state.manualBlue).length>0;
- $('autoBlue').textContent=manual?'Manuell':'Automatik';$('autoBlue').setAttribute('data-manual',String(manual));$('autoBlue').setAttribute('data-paused',String(manual));
- $('autoBlue').setAttribute('aria-label',manual?'Manuell – Coaching wieder einschalten':'Automatik – blaue Spieler werden automatisch angeordnet');$('autoBlue').setAttribute('title',manual?'Coaching und automatische Verteidigung einschalten':'Blaue Spieler werden automatisch angeordnet');$('enableAutoBlue').hidden=!manual;
+ $('autoBlue').textContent=manual?'Automatik an':'Automatik';$('autoBlue').setAttribute('data-manual',String(manual));$('autoBlue').setAttribute('data-paused',String(manual));
+ $('autoBlue').setAttribute('aria-label',manual?'Automatik an – Coaching wieder einschalten':'Automatik – blaue Spieler werden automatisch angeordnet');$('autoBlue').setAttribute('title',manual?'Coaching und automatische Verteidigung einschalten':'Blaue Spieler werden automatisch angeordnet');$('enableAutoBlue').hidden=!manual;
  $('coachingToggle').hidden=!(state.coachingPrompt||state.coachingOff);$('coachingToggle').textContent='Manuell aus';
  $('coachingToggle').setAttribute('aria-pressed',String(state.coachingOff));$('coachingToggle').setAttribute('data-attention',String(state.coachingPrompt&&!state.coachingOff));
  $('coachingToggle').setAttribute('title',state.coachingOff?'Manuellen Modus ausschalten und Automatik wieder einschalten':'Automatik und automatische Verteidigung wieder einschalten');
