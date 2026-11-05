@@ -1011,21 +1011,60 @@ function drawPlayerPassControl(d,root){
  g.addEventListener('click',play);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')play(e);});
 }
 let spacePassDrag=null;
-function spacePassCandidate(origin,id,ball,target,flightTime,speedKmh,reactionTime=0){
- const hit=transitionInterception(origin,id,ball,target,flightTime,0,reactionTime,speedKmh,2.95),speed=speedKmh/3.6;
- if(hit)return{...hit,origin:{...origin},speedKmh,arrival:reactionTime+dist(origin,target)/speed};
- const distance=dist(origin,target),time=Math.max(flightTime,reactionTime+Math.max(0,distance-2.95)/speed);
- return{id,origin:{...origin},point:{...target},runEnd:demoMix(origin,target,distance>0?Math.max(0,(distance-2.95)/distance):0),time,reactionTime,speedKmh,arrival:reactionTime+distance/speed};
+function spaceBallPath(start,target){
+ const length=dist(start,target),flightTime=length/transitionBallSpeed,ux=(target.x-start.x)/length,uy=(target.y-start.y)/length;
+ const edgeX=ux>0?(67-target.x)/ux:ux<0?(1-target.x)/ux:Infinity,edgeY=uy>0?(104-target.y)/uy:uy<0?(1-target.y)/uy:Infinity;
+ const rollDistance=Math.max(0,Math.min(3,edgeX,edgeY)),rollTime=2*rollDistance/transitionBallSpeed;
+ return{start:{...start},target:{...target},flightTime,rollDistance,rollTime,ux,uy,endTime:flightTime+rollTime};
+}
+function spaceBallAt(path,time){
+ if(time<=path.flightTime)return demoMix(path.start,path.target,time/path.flightTime);
+ const u=path.rollTime?clamp((time-path.flightTime)/path.rollTime,0,1):1,distance=path.rollDistance*(2*u-u*u);
+ return{x:path.target.x+path.ux*distance,y:path.target.y+path.uy*distance};
+}
+function spaceBlueReceiver(origin,id,path){
+ const speed=state.maxSpeed/3.6,toTarget=dist(origin,path.target),arrival=toTarget/speed;
+ // Blue must visit the chosen reception point before chasing the rolling ball.
+ let low=Math.max(path.flightTime,arrival),high=Math.max(low,(toTarget+path.rollDistance)/speed,path.endTime);
+ const gap=t=>toTarget+dist(path.target,spaceBallAt(path,t))-speed*t;
+ if(gap(low)>1e-9){for(let i=0;i<55;i++){const mid=(low+high)/2;if(gap(mid)>0)low=mid;else high=mid;}}else high=low;
+ const time=high,point=spaceBallAt(path,time);
+ return{id,origin:{...origin},point,runEnd:{...point},via:{...path.target},arrival,time,reactionTime:0,speedKmh:state.maxSpeed};
+}
+function spaceRedInterceptor(origin,id,path){
+ const speed=state.redMaxSpeed/3.6,radius=2.95;
+ let hit=transitionInterception(origin,id,path.start,path.target,path.flightTime,0,0,state.redMaxSpeed,radius);
+ if(hit)return{...hit,origin:{...origin},speedKmh:state.redMaxSpeed,arrival:dist(origin,path.target)/speed};
+ const gap=t=>dist(origin,spaceBallAt(path,t))-radius-speed*t;
+ // Search the decelerating section for the earliest reachable point.
+ let time=null;
+ for(let i=0;i<64&&time===null;i++){
+  const left=path.flightTime+path.rollTime*i/64,right=path.flightTime+path.rollTime*(i+1)/64;
+  let lo=left,hi=right;
+  for(let n=0;n<24;n++){const u=lo+(hi-lo)/3,v=hi-(hi-lo)/3;if(gap(u)<gap(v))hi=v;else lo=u;}
+  const minimum=(lo+hi)/2,end=gap(right)<gap(minimum)?right:minimum;
+  if(gap(left)<=0)time=left;else if(gap(end)<=0){lo=left;hi=end;for(let n=0;n<45;n++){const mid=(lo+hi)/2;if(gap(mid)>0)lo=mid;else hi=mid;}time=hi;}
+ }
+ if(time===null)time=Math.max(path.endTime,Math.max(0,dist(origin,spaceBallAt(path,path.endTime))-radius)/speed);
+ const point=spaceBallAt(path,time),distance=dist(origin,point),runEnd=demoMix(origin,point,distance?Math.max(0,(distance-radius)/distance):0);
+ return{id,origin:{...origin},point,runEnd,time,reactionTime:0,speedKmh:state.redMaxSpeed,arrival:dist(origin,path.target)/speed};
+}
+function spaceRunnerAt(candidate,time){
+ if(candidate.via){
+  const distance=Math.min(time,candidate.time)*candidate.speedKmh/3.6,first=dist(candidate.origin,candidate.via);
+  if(distance<=first)return demoMix(candidate.origin,candidate.via,first?distance/first:1);
+  const rest=dist(candidate.via,candidate.runEnd);return demoMix(candidate.via,candidate.runEnd,rest?(distance-first)/rest:1);
+ }
+ return demoMix(candidate.origin,candidate.runEnd,candidate.time?time/candidate.time:1);
 }
 function spacePassOption(d,target){
- const flightTime=dist(d.editBall,target)/transitionBallSpeed;if(flightTime<=.05)return null;
+ const path=spaceBallPath(d.editBall,target),flightTime=path.flightTime;if(flightTime<=.05)return null;
  const order=(a,b)=>a.time-b.time||a.arrival-b.arrival||a.id-b.id;
- const team=passingTeam(d),source=d.holder??receivers(d).map((p,id)=>({id,d:dist(p,d.editBall)})).sort((a,b)=>a.d-b.d)[0].id;
- const blues=d.editPositions.map((origin,id)=>team==='blue'&&id===source?null:spacePassCandidate(origin,id,d.editBall,target,flightTime,state.maxSpeed,team==='red'?redReactionTime:0)).filter(Boolean).sort(order);
- const reds=d.editReds.map((origin,id)=>team==='red'&&id===source?null:spacePassCandidate(origin,id,d.editBall,target,flightTime,state.redMaxSpeed)).filter(Boolean).sort(order);
- const blue=blues[0],red=reds[0];if(!blue||!red)return null;
- const redWins=red.time<blue.time-1e-7||(Math.abs(red.time-blue.time)<=1e-7&&red.arrival<=blue.arrival);
- return{target:{...target},flightTime,blue,red,redWins,opponentWins:team==='red'?!redWins:redWins,close:Math.abs(blue.time-red.time)<.03,finishTime:redWins?red.time:blue.time};
+ const source=d.holder??d.editPositions.map((p,id)=>({id,d:dist(p,d.editBall)})).sort((a,b)=>a.d-b.d)[0].id;
+ const blue=d.editPositions.map((origin,id)=>id===source?null:spaceBlueReceiver(origin,id,path)).filter(Boolean).sort(order)[0];
+ const red=d.editReds.map((origin,id)=>spaceRedInterceptor(origin,id,path)).sort(order)[0];if(!blue||!red)return null;
+ const redWins=red.time<=blue.time+1e-7;
+ return{target:{...target},path,flightTime,blue,red,redWins,opponentWins:redWins,close:Math.abs(blue.time-red.time)<.03,finishTime:redWins?red.time:blue.time};
 }
 function clearSpacePass(d){if(!d)return;d.spacePreview=null;d.spaceFixed=false;spacePassDrag=null;d.editDirty=true;}
 function updateSpacePass(d,target){
@@ -1043,11 +1082,10 @@ function startSpacePass(d=transitionDemo){
 function advanceSpacePass(d,dt){
  const p=d.play,race=p.race;p.elapsed=Math.min(p.time,p.elapsed+Math.max(0,dt));
  for(const [team,candidate] of [['blue',race.blue],['red',race.red]]){
-  const reaction=candidate.reactionTime||0,progress=p.elapsed<=reaction?0:candidate.time>reaction?(p.elapsed-reaction)/(candidate.time-reaction):1;
-  const q=demoMix(candidate.origin,candidate.runEnd,progress);
+  const q=spaceRunnerAt(candidate,p.elapsed);
   (team==='blue'?d.editPositions:d.editReds)[candidate.id]=q;
  }
- d.editBall=demoMix(p.startBall,p.spaceTarget,p.elapsed/p.flightTime);d.editDirty=true;
+ d.editBall=spaceBallAt(race.path,p.elapsed);d.editDirty=true;
  if(p.elapsed>=p.time){d.play=null;completePassPossession(d,race.redWins?'red':'blue',race.redWins?race.red.id:race.blue.id);}
 }
 function drawSpaceArrow(root,a,b,color){
@@ -1058,7 +1096,7 @@ function drawSpaceArrow(root,a,b,color){
 function drawSpacePassPreview(d,root){
  const p=d.spacePreview;if(!p)return;
  const color=p.close?'#f1d985':p.opponentWins?'#ff7d70':'#d9f994';
- drawSpaceArrow(root,d.editBall,p.target,color);drawSpaceArrow(root,p.blue.origin,p.blue.runEnd,'#8ccaff');drawSpaceArrow(root,p.red.origin,p.red.runEnd,'#ff9f82');
+ drawSpaceArrow(root,d.editBall,p.target,color);drawSpaceArrow(root,p.blue.origin,p.target,'#8ccaff');if(dist(p.target,p.blue.runEnd)>.1)drawSpaceArrow(root,p.target,p.blue.runEnd,'#8ccaff');drawSpaceArrow(root,p.red.origin,p.red.runEnd,'#ff9f82');
  for(const [q,c] of [[p.blue,'#8ccaff'],[p.red,'#ff9f82']])el('circle',{cx:q.origin.x,cy:q.origin.y,r:2.5,fill:'none',stroke:c,'stroke-width':'.3','pointer-events':'none'},root);
 }
 function drawSpacePassControls(d,root){
