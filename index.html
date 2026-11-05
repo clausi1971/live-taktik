@@ -915,8 +915,8 @@ function polynomialRoots(coeff){
  }
  return roots.sort((a,b)=>a-b).filter((x,i,all)=>!i||x-all[i-1]>1e-8);
 }
-function firstReachTime(origin,ballAt,end,speed,reaction,radius,breaks=[]){
- const sections=[...new Set([0,...breaks.filter(t=>t>0&&t<end),end])].sort((a,b)=>a-b);
+function firstReachTime(origin,ballAt,end,speed,reaction,radius,breaks=[],startTime=0){
+ const sections=[...new Set([startTime,...breaks.filter(t=>t>startTime&&t<end),end])].sort((a,b)=>a-b);
  for(let k=1;k<sections.length;k++){
   const left=sections[k-1],length=sections[k]-left,start=ballAt(left),mid=ballAt(left+length/2),finish=ballAt(left+length);
   const dx=start.x-origin.x,dy=start.y-origin.y,bx=4*mid.x-3*start.x-finish.x,by=4*mid.y-3*start.y-finish.y,cx=2*(finish.x+start.x-2*mid.x),cy=2*(finish.y+start.y-2*mid.y);
@@ -1063,13 +1063,11 @@ function spaceBallPath(start,target){
 }
 function spaceBallAt(path,time){const distance=Math.min(path.totalDistance,ballTravelDistance(time));return{x:path.start.x+path.ux*distance,y:path.start.y+path.uy*distance};}
 function spaceBlueReceiver(origin,id,path){
- const speed=state.maxSpeed/3.6,toTarget=dist(origin,path.target),arrival=toTarget/speed;
- // Blue must visit the chosen reception point before chasing the rolling ball.
- let low=Math.max(path.flightTime,arrival),high=Math.max(low,(toTarget+path.rollDistance)/speed,path.endTime);
- const gap=t=>toTarget+dist(path.target,spaceBallAt(path,t))-speed*t;
- if(gap(low)>1e-9){for(let i=0;i<55;i++){const mid=(low+high)/2;if(gap(mid)>0)low=mid;else high=mid;}}else high=low;
- const time=high,point=spaceBallAt(path,time);
- return{id,origin:{...origin},point,runEnd:{...point},via:{...path.target},arrival,time,reactionTime:0,speedKmh:state.maxSpeed};
+ const speed=state.maxSpeed/3.6,arrival=dist(origin,path.target)/speed,at=t=>spaceBallAt(path,t);
+ // Receive at or beyond the selected target, using a direct run to the pickup point.
+ const time=firstReachTime(origin,at,path.endTime,speed,0,0,[],path.flightTime)??Math.max(path.endTime,dist(origin,at(path.endTime))/speed);
+ const point=at(time);
+ return{id,origin:{...origin},point,runEnd:{...point},arrival,time,reactionTime:0,speedKmh:state.maxSpeed};
 }
 function spaceRedInterceptor(origin,id,path){
  const speed=state.redMaxSpeed/3.6,radius=2.95,at=t=>spaceBallAt(path,t);
@@ -1124,7 +1122,7 @@ function drawSpaceArrow(root,a,b,color){
 function drawSpacePassPreview(d,root){
  const p=d.spacePreview;if(!p)return;
  const color=p.close?'#f1d985':p.opponentWins?'#ff7d70':'#d9f994';
- drawSpaceArrow(root,d.editBall,p.target,color);drawSpaceArrow(root,p.blue.origin,p.target,'#8ccaff');if(dist(p.target,p.blue.runEnd)>.1)drawSpaceArrow(root,p.target,p.blue.runEnd,'#8ccaff');drawSpaceArrow(root,p.red.origin,p.red.runEnd,'#ff9f82');
+ drawSpaceArrow(root,d.editBall,p.target,color);drawSpaceArrow(root,p.blue.origin,p.blue.runEnd,'#8ccaff');drawSpaceArrow(root,p.red.origin,p.red.runEnd,'#ff9f82');
  for(const [q,c] of [[p.blue,'#8ccaff'],[p.red,'#ff9f82']])el('circle',{cx:q.origin.x,cy:q.origin.y,r:2.5,fill:'none',stroke:c,'stroke-width':'.3','pointer-events':'none'},root);
 }
 function drawSpacePassControls(d,root){
