@@ -922,7 +922,7 @@ function advanceTransitionPass(d,dt){
 function finishTransitionDrag(e){
  if(!transitionDrag||transitionDrag.pointer!==e.pointerId)return;
  const v=transitionDrag;transitionDrag=null;const d=transitionDemo;
- if(e.type==='pointerup'&&d?.interactive&&v.team===passingTeam(d)&&!d.freeMode&&dist(v.origin,receivers(d)[v.id])>.1)startTransitionPass(d);
+ if(d?.interactive)d.editDirty=true;
 }
 function updateTransitionPreview(){const d=transitionDemo;if(d?.interactive&&!d.freeMode&&!state.coachingOff){if(d.spacePreview)updateSpacePass(d,d.spacePreview.target);else if(d.preview)d.preview=transitionPassOption(d,d.preview.id,d.preview.origin,receivers(d)[d.preview.id]);}if(d?.interactive)d.editDirty=true;}
 function regainTransitionBall(id){
@@ -954,7 +954,7 @@ function renderTransitionInteractive(d){
  const root=$('transitionLayer');root.replaceChildren();
  const p=d.preview;
  drawSpacePassPreview(d,root);
- const message=d.spacePreview?spacePassMessage(d.spacePreview):d.play?.kind==='space'?'Raumpass · Blau und Rot laufen zum Ball':d.freeMode?'Frei verschieben aus':d.play?(d.play.interception?(d.play.elapsed<redReactionTime?'Riskanter Pass · '+teamName(opposingTeam(d))+' reagiert gleich':'Riskanter Pass · '+teamName(opposingTeam(d))+' läuft zum Ball'):d.play.elapsed<d.play.launchDelay?teamName(passingTeam(d))+' startet – Pass folgt':'Pass in den Lauf · Ball und '+teamName(passingTeam(d))+' unterwegs'):!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.flightTime.toFixed(1)+' s · Lauf '+p.runTime.toFixed(1)+' s':p.flightTime<=.05?'Ziel weiter vom Ball wählen':'Riskanter Pass · Loslassen: '+teamName(opposingTeam(d))+' kann abfangen';
+ const message=d.spacePreview?spacePassMessage(d.spacePreview):d.play?.kind==='space'?'Raumpass · Blau und Rot laufen zum Ball':d.freeMode?'Frei verschieben aus':d.play?(d.play.interception?(d.play.elapsed<redReactionTime?'Riskanter Pass · '+teamName(opposingTeam(d))+' reagiert gleich':'Riskanter Pass · '+teamName(opposingTeam(d))+' läuft zum Ball'):d.play.elapsed<d.play.launchDelay?teamName(passingTeam(d))+' startet – Pass folgt':'Pass in den Lauf · Ball und '+teamName(passingTeam(d))+' unterwegs'):!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.flightTime.toFixed(1)+' s · Lauf '+p.runTime.toFixed(1)+' s':p.flightTime<=.05?'Ziel weiter vom Ball wählen':'Riskanter Pass · Freigabe: '+teamName(opposingTeam(d))+' kann abfangen';
  if($('transitionStatus').textContent!==message)$('transitionStatus').textContent=message;
  if(d.play){const run=d.play;el('line',{x1:run.origin.x,y1:run.origin.y,x2:run.target.x,y2:run.target.y,stroke:'#8ccaff','stroke-width':'.3','stroke-dasharray':'.6 .7','pointer-events':'none'},root);}
  if(d.play?.interception){const hit=d.play.interception,red=opponents(d)[hit.id];el('line',{x1:d.play.redOrigin.x,y1:d.play.redOrigin.y,x2:hit.runEnd.x,y2:hit.runEnd.y,stroke:'#ffbd70','stroke-width':'.4','stroke-dasharray':'.8 .6','pointer-events':'none'},root);el('circle',{cx:red.x,cy:red.y,r:2.6,fill:'none',stroke:'#ffbd70','stroke-width':'.5','pointer-events':'none'},root);}
@@ -990,11 +990,22 @@ function renderTransitionInteractive(d){
  d.editReds.forEach((q,id)=>draw(q,'red',id));d.editPositions.forEach((q,id)=>draw(q,'blue',id));
  el('circle',{cx:d.editBall.x,cy:d.editBall.y,r:1.05,fill:'#fff',stroke:'#e8d37b','stroke-width':'.5','pointer-events':'none'},root);
  drawSpacePassControls(d,root);
+ drawPlayerPassControl(d,root);
 }
 $('pitch').addEventListener('pointermove',e=>{if(!transitionDrag||e.pointerId!==transitionDrag.pointer)return;e.preventDefault();const q=point(e),v=transitionDrag;moveTransitionPlayer(v.id,{x:q.x+v.dx,y:q.y+v.dy},v.origin,v.team);});
 for(const type of ['pointerup','pointercancel','lostpointercapture'])$('pitch').addEventListener(type,finishTransitionDrag);
 
 // A pass into space is selected by holding the mouse, then confirmed separately.
+function drawPlayerPassControl(d,root){
+ const p=d.preview;if(!p||d.play||d.freeMode||state.coachingOff||p.flightTime<=.05)return;
+ const x=clamp(p.receive.x+2.5,1,62),y=clamp(p.receive.y-4,1,100);
+ const g=el('g',{role:'button',tabindex:0,'aria-label':'Pass freigeben','data-space-control':'player-pass',class:'space-pass-control','pointer-events':'all'},root);
+ el('rect',{x,y,width:4.5,height:3.8,rx:.6,fill:'#203d2c','fill-opacity':'.65',stroke:p.possible?'#d9f994':'#ffb3a9','stroke-width':'.25'},g);
+ el('text',{x:x+2.25,y:y+2.6,'text-anchor':'middle','font-size':'2.5',fill:'#e6ffb3','pointer-events':'none'},g).textContent='✓';
+ g.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();});
+ const play=e=>{e.preventDefault();e.stopPropagation();startTransitionPass(d);};
+ g.addEventListener('click',play);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')play(e);});
+}
 let spacePassDrag=null;
 function spacePassCandidate(origin,id,ball,target,flightTime,speedKmh,reactionTime=0){
  const hit=transitionInterception(origin,id,ball,target,flightTime,0,reactionTime,speedKmh,2.95),speed=speedKmh/3.6;
