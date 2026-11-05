@@ -1002,13 +1002,15 @@ for(const type of ['pointerup','pointercancel','lostpointercapture'])$('pitch').
 // A pass into space is selected by holding the mouse, then confirmed separately.
 function drawPlayerPassControl(d,root){
  const p=d.preview;if(!p||d.play||d.freeMode||state.coachingOff||p.flightTime<=.05)return;
- const x=clamp(p.receive.x+2.5,1,62),y=clamp(p.receive.y-4,1,100);
- const g=el('g',{role:'button',tabindex:0,'aria-label':'Pass freigeben','data-space-control':'player-pass',class:'space-pass-control','pointer-events':'all'},root);
- el('rect',{x,y,width:4.5,height:3.8,rx:.6,fill:'#203d2c','fill-opacity':'.65',stroke:p.possible?'#d9f994':'#ffb3a9','stroke-width':'.25'},g);
- el('text',{x:x+2.25,y:y+2.6,'text-anchor':'middle','font-size':'2.5',fill:'#e6ffb3','pointer-events':'none'},g).textContent='✓';
- g.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();});
- const play=e=>{e.preventDefault();e.stopPropagation();startTransitionPass(d);};
- g.addEventListener('click',play);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')play(e);});
+ const x=clamp(p.receive.x+2.5,1,58),y=clamp(p.receive.y-4,1,100);
+ for(const [offset,label,symbol,action] of [[0,'Pass abbrechen','×',()=>{d.preview=null;d.editDirty=true;}],[4.5,'Pass freigeben','✓',()=>startTransitionPass(d)]]){
+  const g=el('g',{role:'button',tabindex:0,'aria-label':label,'data-space-control':'player-pass',class:'space-pass-control','pointer-events':'all'},root);
+  el('rect',{x:x+offset,y,width:4.5,height:3.8,rx:.6,fill:'#203d2c','fill-opacity':'.65',stroke:p.possible?'#d9f994':'#ffb3a9','stroke-width':'.25'},g);
+  el('text',{x:x+offset+2.25,y:y+2.6,'text-anchor':'middle','font-size':'2.5',fill:offset?'#e6ffb3':'#f7ece7','pointer-events':'none'},g).textContent=symbol;
+  g.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();});
+  const activate=e=>{e.preventDefault();e.stopPropagation();action();};
+  g.addEventListener('click',activate);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')activate(e);});
+ }
 }
 let spacePassDrag=null;
 function spaceBallPath(start,target){
