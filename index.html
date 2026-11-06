@@ -1235,6 +1235,34 @@ function startPushUp(d){
    ?iv-clamp((iv-zdm)/3,2.1,4)
    :Math.max(1,Math.min(p.y,iv-3));
  });
+ if(d.holder!==near+1){
+  const preferred=blueEnd[near];
+  const ball={...d.editBall};
+  if(d.holder>=1&&d.holder<=4){
+   const from=blueStart[d.holder-1],to=blueEnd[d.holder-1];
+   ball.x+=to.x-from.x;
+   ball.y+=to.y-from.y;
+  }
+  const blue=[d.editPositions[0],...blueEnd,...d.editPositions.slice(5)];
+  const reds=[d.editReds[0],...redEnd];
+  const candidates=[preferred];
+  const inward=near===0?1:-1;
+  for(const depth of [0,-2,2,-4,4,-6,6,-8,8,10,12]){
+   for(const width of [0,2,-2,4,-4,6,-6,8,10,12,14,16]){
+    const x=clamp(preferred.x+width*inward,near===0?2:35,near===0?33:66);
+    const y=preferred.y+depth;
+    if(y>=depthLimit&&y<=blueStart[near].y-1)candidates.push({x,y});
+   }
+  }
+  candidates.sort((a,b)=>dist(a,preferred)-dist(b,preferred));
+  const offer=candidates.find(target=>{
+   if(blue.some((p,id)=>id!==near+1&&dist(p,target)<3)||reds.some(p=>dist(p,target)<2.1))return false;
+   blue[near+1]=target;
+   const editReds=reds.map(p=>redPassPosition(p,blue));
+   return transitionPassOption({...d,editBall:ball,editReds},near+1,target,target)?.possible;
+  });
+  if(offer)blueEnd[near]=offer;
+ }
  const leadTime=Math.max(...redStart.map((p,i)=>dist(p,redReady[i])))/redSpeed;
  d.pushUp={blueStart,blueEnd,redStart,redReady,redEnd,leadTime,
   duration:Math.max(...blueStart.map((p,i)=>dist(p,blueEnd[i])/(state.maxSpeed/3.6)),
