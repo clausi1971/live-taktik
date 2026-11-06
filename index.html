@@ -123,6 +123,14 @@ html[data-theme="dark"] .pitch-wrap>.ball-choice button{background:#c5e5a4;color
 /* Clear manual-mode action and compact active display controls. */
 .transition-ui #transitionStatus[data-paused=true]{background:#d6f5a7;color:#183d26;border:2px solid #a4df70;font-weight:600;animation:none;box-shadow:0 0 0 1px #b8ed8844}
 
+.transition-ui #transitionFree:not([hidden])[aria-pressed="false"]{
+ background:#d6f5a7;
+ color:#183d26;
+ border-color:#a4df70;
+ font-weight:700;
+ box-shadow:0 0 0 1px #a4df70,0 0 8px #b8ed8866;
+}
+
 .header-actions :is(#toggleFieldZones,#explain,#highlightChains){padding:6px 7px;min-height:32px;font-size:10px}
 .header-actions :is(#toggleFieldZones,#explain,#highlightChains)[aria-pressed=true],html[data-theme="dark"] .header-actions :is(#toggleFieldZones,#explain,#highlightChains)[aria-pressed=true]{background:#d6f5a7;color:#183d26;border-color:#a4ce7d;box-shadow:inset 0 -2px 0 #a4ce7d}
 @media(max-width:600px){.header-actions :is(#toggleFieldZones,#explain,#highlightChains){padding:5px 6px;font-size:10px;min-height:30px}}
