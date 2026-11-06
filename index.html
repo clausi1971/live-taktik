@@ -123,16 +123,6 @@ html[data-theme="dark"] .pitch-wrap>.ball-choice button{background:#c5e5a4;color
 /* Clear manual-mode action and compact active display controls. */
 .transition-ui #transitionStatus[data-paused=true]{background:#d6f5a7;color:#183d26;border:2px solid #a4df70;font-weight:600;animation:none;box-shadow:0 0 0 1px #b8ed8844}
 
-.transition-ui #transitionControls[data-free-mode=true]{
- border:2px solid #d6f5a7;
- animation:free-mode-border 1.4s ease-in-out infinite;
-}
-@keyframes free-mode-border{
- 50%{border-color:#789758;box-shadow:0 0 8px #c3f49d66}
-}
-@media(prefers-reduced-motion:reduce){
- .transition-ui #transitionControls[data-free-mode=true]{animation:none}
-}
 .header-actions :is(#toggleFieldZones,#explain,#highlightChains){padding:6px 7px;min-height:32px;font-size:10px}
 .header-actions :is(#toggleFieldZones,#explain,#highlightChains)[aria-pressed=true],html[data-theme="dark"] .header-actions :is(#toggleFieldZones,#explain,#highlightChains)[aria-pressed=true]{background:#d6f5a7;color:#183d26;border-color:#a4ce7d;box-shadow:inset 0 -2px 0 #a4ce7d}
 @media(max-width:600px){.header-actions :is(#toggleFieldZones,#explain,#highlightChains){padding:5px 6px;font-size:10px;min-height:30px}}
@@ -920,10 +910,9 @@ $('transitionFree').onclick=()=>setTransitionFreeMode(true);
 $('transitionStatus').onclick=()=>{if(transitionDemo?.freeMode&&!state.coachingOff)setTransitionFreeMode(false);};
 function updateTransitionFreeControls(d){
  $('transitionClose').setAttribute('aria-label',d?.interactive?'Ball an Rot übergeben und Verteidigung starten':'Animation schließen');
- $('transitionControls').setAttribute('data-free-mode',String(!!d?.freeMode));
  $('transitionControls').setAttribute('data-pass-check-active',String(!!d?.interactive&&!d?.freeMode&&!state.coachingOff));
  $('pitch').classList.toggle('space-pass-enabled',!!d?.interactive&&!d?.freeMode&&!state.coachingOff);
- $('transitionFree').hidden=!d?.interactive||d.freeMode;
+ $('transitionFree').hidden=!d?.interactive;
  $('transitionFree').setAttribute('aria-pressed',String(!!d?.freeMode));
  $('transitionStatus').setAttribute('data-paused',String(!!d?.freeMode));
  $('transitionStatus').setAttribute('aria-pressed',String(!d?.freeMode));
@@ -1067,7 +1056,7 @@ function renderTransitionInteractive(d){
  const root=$('transitionLayer');root.replaceChildren();
  const p=d.preview;
  drawSpacePassPreview(d,root);
- const message=d.pushUp?'Aufrücken · Zentrum absichern':d.spacePreview?spacePassMessage(d.spacePreview):d.play?.kind==='space'?'Raumpass · Blau und Rot laufen zum Ball':d.freeMode?'Frei verschieben an':d.play?(d.play.interception?(d.play.elapsed<redReactionTime?'Riskanter Pass · '+teamName(opposingTeam(d))+' reagiert gleich':'Riskanter Pass · '+teamName(opposingTeam(d))+' läuft zum Ball'):d.play.elapsed<d.play.launchDelay?teamName(passingTeam(d))+' startet – Pass folgt':'Pass in den Lauf · Ball und '+teamName(passingTeam(d))+' unterwegs'):!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.flightTime.toFixed(1)+' s · Lauf '+p.runTime.toFixed(1)+' s':p.unreachable?'Ziel zu weit · Ball stoppt nach 35,7 m':p.flightTime<=.05?'Ziel weiter vom Ball wählen':'Riskanter Pass · Freigabe: '+teamName(opposingTeam(d))+' kann abfangen';
+ const message=d.pushUp?'Aufrücken · Zentrum absichern':d.spacePreview?spacePassMessage(d.spacePreview):d.play?.kind==='space'?'Raumpass · Blau und Rot laufen zum Ball':d.freeMode?'Frei verschieben aus':d.play?(d.play.interception?(d.play.elapsed<redReactionTime?'Riskanter Pass · '+teamName(opposingTeam(d))+' reagiert gleich':'Riskanter Pass · '+teamName(opposingTeam(d))+' läuft zum Ball'):d.play.elapsed<d.play.launchDelay?teamName(passingTeam(d))+' startet – Pass folgt':'Pass in den Lauf · Ball und '+teamName(passingTeam(d))+' unterwegs'):!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.flightTime.toFixed(1)+' s · Lauf '+p.runTime.toFixed(1)+' s':p.unreachable?'Ziel zu weit · Ball stoppt nach 35,7 m':p.flightTime<=.05?'Ziel weiter vom Ball wählen':'Riskanter Pass · Freigabe: '+teamName(opposingTeam(d))+' kann abfangen';
  if($('transitionStatus').textContent!==message)$('transitionStatus').textContent=message;
  if(d.play){const run=d.play;el('line',{x1:run.origin.x,y1:run.origin.y,x2:run.target.x,y2:run.target.y,stroke:'#8ccaff','stroke-width':'.3','stroke-dasharray':'.6 .7','pointer-events':'none'},root);}
  if(d.play?.interception){const hit=d.play.interception,red=opponents(d)[hit.id];el('line',{x1:d.play.redOrigin.x,y1:d.play.redOrigin.y,x2:hit.runEnd.x,y2:hit.runEnd.y,stroke:'#ffbd70','stroke-width':'.4','stroke-dasharray':'.8 .6','pointer-events':'none'},root);el('circle',{cx:red.x,cy:red.y,r:2.6,fill:'none',stroke:'#ffbd70','stroke-width':'.5','pointer-events':'none'},root);}
