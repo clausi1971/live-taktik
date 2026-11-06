@@ -774,24 +774,36 @@ function planTransitionSpaces(d){
  const occupied=[{...d.win},...(d.firstPass?[{...d.offer}]:[])];
  const ballCarrierIndex=occupied.length-1;
  const linkFrom=occupied[ballCarrierIndex];
+ const farSideMidfielders=new Set();
+ for(const label of ['ZDM','ZM']){
+  const group=d.bs.map((p,id)=>({p,id})).filter(({id})=>playerLabel('blue',id)===label);
+  if(group.length<2)continue;
+  group.sort((a,b)=>Math.abs(b.p.x-linkFrom.x)-Math.abs(a.p.x-linkFrom.x)||dist(b.p,linkFrom)-dist(a.p,linkFrom)||a.id-b.id);
+  farSideMidfielders.add(group[0].id);
+ }
  let index=1;
  shape.forEach((count,row)=>{for(let col=0;col<count;col++,index++){
   const id=index,start=d.bs[id];if(reserved.has(id))continue;
   const cb=row===0&&(count===3||(col>0&&col<count-1));
-  const wide=!cb&&count>=3&&(col===0||col===count-1);
+  const limited=farSideMidfielders.has(id);
+  const wide=!limited&&!cb&&count>=3&&(col===0||col===count-1);
   const central=!wide&&!cb;
+  const farSideIsRight=linkFrom.x===34?start.x>=34:linkFrom.x<34;
+  const minX=farSideIsRight?27.2:13.6,maxX=farSideIsRight?54.4:40.8;
   const side=col===0?'left':'right';
   let roleX=start.x,roleY=start.y,kind='between-lines';
   if(cb){kind='centre-back';roleX=count===3?(col+1)*17:count===5?17+(col-1)*17:col===1?23:45;roleY=clamp(front+9,12,95);}
   else if(wide){kind='wide';roleX=side==='left'?6:62;roleY=row===0?(lines.at(-1)+(lines.at(-2)??lines[0]))/2:(lines[0]+(lines[1]??lines[0]+16))/2;}
   else if(row===shape.length-1){kind='seam';roleX=34+(col-(count-1)/2)*12;roleY=lines[0]+3;}
   else{const band=row===1&&shape.length>=4?Math.min(1,lines.length-2):0;roleY=(lines[band]+lines[Math.min(band+1,lines.length-1)])/2;}
+  if(limited)roleX=clamp(roleX,minX,maxX);
   const xs=new Set([roleX,...[-8,-4,4,8].map(n=>roleX+n)]),ys=new Set([-6,-3,0,3,6].map(n=>roleY+n));
   if(wide){xs.clear();for(const x of side==='left'?[4,6,8,10]:[58,60,62,64])xs.add(x);}
   if(cb){ys.clear();for(const offset of [6,8,10,12])ys.add(front+offset);}
   if(!wide&&!cb)for(const chain of chains)for(let j=1;j<chain.length;j++)xs.add((chain[j-1].x+chain[j].x)/2);
   const choices=[];
   const evaluate=q=>{
+   if(limited&&(q.x<minX||q.x>maxX))return;
    if(q.x<3||q.x>65||q.y<7||q.y>98||dist(start,q)>state.maxSpeed/3.6*4||
     occupied.some((p,i)=>dist(p,q)<(central&&i===ballCarrierIndex?4:5)))return;
    const distances=reds.slice(1).map(p=>dist(p,q)).sort((a,b)=>a-b);if(distances[0]<4.5)return;
@@ -1209,6 +1221,7 @@ function canPushUp(d){
 function startPushUp(d){
  if(d!==transitionDemo||!canPushUp(d))return;
  const blueStart=d.editPositions.slice(1,5).map(p=>({...p}));
+ const keeperStart={...d.editPositions[0]};
  const redStart=d.editReds.slice(1).map(p=>({...p}));
  const holdingMidfielders=d.editPositions.filter((_,id)=>playerLabel('blue',id)==='ZDM');
  const depthLimit=3;
@@ -1222,6 +1235,7 @@ function startPushUp(d){
  const adjacent=far===0?1:2;
  blueEnd[far].x=clamp(blueEnd[adjacent].x+(far===0?-5:5),2,66);
  blueEnd[far].y=Math.max(depthLimit,blueEnd[adjacent].y-2);
+ const keeperEnd={...keeperStart,y:Math.min(105,Math.max(blueEnd[1].y,blueEnd[2].y)+22)};
  if(blueEnd.every((p,i)=>p.y>=blueStart[i].y-1e-7)){
   $('transitionStatus').textContent='Zum Aufrücken fehlt Platz vor der blauen Abwehr.';
   return;
@@ -1242,12 +1256,13 @@ function startPushUp(d){
  if(d.holder!==near+1){
   const preferred=blueEnd[near];
   const ball={...d.editBall};
+  if(d.holder===0)ball.y+=keeperEnd.y-keeperStart.y;
   if(d.holder>=1&&d.holder<=4){
    const from=blueStart[d.holder-1],to=blueEnd[d.holder-1];
    ball.x+=to.x-from.x;
    ball.y+=to.y-from.y;
   }
-  const blue=[d.editPositions[0],...blueEnd,...d.editPositions.slice(5)];
+  const blue=[keeperEnd,...blueEnd,...d.editPositions.slice(5)];
   const reds=[d.editReds[0],...redEnd];
   const candidates=[preferred];
   const inward=near===0?1:-1;
@@ -1268,8 +1283,9 @@ function startPushUp(d){
   if(offer)blueEnd[near]=offer;
  }
  const leadTime=Math.max(...redStart.map((p,i)=>dist(p,redReady[i])))/redSpeed;
- d.pushUp={blueStart,blueEnd,redStart,redReady,redEnd,leadTime,
+ d.pushUp={blueStart,blueEnd,keeperStart,keeperEnd,redStart,redReady,redEnd,leadTime,
   duration:Math.max(...blueStart.map((p,i)=>dist(p,blueEnd[i])/(state.maxSpeed/3.6)),
+   dist(keeperStart,keeperEnd)/(state.maxSpeed/3.6),
    ...redReady.map((p,i)=>dist(p,redEnd[i])/redSpeed)),
   elapsed:0,ball:{...d.editBall}};
  d.editDirty=true;
@@ -1285,6 +1301,8 @@ function advancePushUp(d,dt){
    :demoMix(move.redReady[i],move.redEnd[i],progress);
  });
  move.blueStart.forEach((p,i)=>{d.editPositions[i+1]=demoMix(p,move.blueEnd[i],progress);});
+ d.editPositions[0]=demoMix(move.keeperStart,move.keeperEnd,progress);
+ if(d.holder===0)d.editBall={...move.ball,y:move.ball.y+d.editPositions[0].y-move.keeperStart.y};
  if(d.holder>=1&&d.holder<=4){
   const from=move.blueStart[d.holder-1],to=d.editPositions[d.holder];
   d.editBall={x:move.ball.x+to.x-from.x,y:move.ball.y+to.y-from.y};
