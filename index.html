@@ -1210,7 +1210,7 @@ function startPushUp(d){
  const depthLimit=3;
  const near=dist(blueStart[0],d.editBall)<=dist(blueStart[3],d.editBall)?0:3;
  const far=3-near;
- const blueEnd=blueStart.map((p,i)=>({...p,y:Math.min(p.y,Math.max(depthLimit,p.y-(i===near?12:8)))}));
+ const blueEnd=blueStart.map((p,i)=>({...p,y:Math.min(p.y,Math.max(depthLimit,p.y-(i===near?16:12)))}));
  const centre=clamp((blueEnd[1].x+blueEnd[2].x)/2,13,55);
  const halfWidth=clamp(Math.abs(blueEnd[2].x-blueEnd[1].x)/2,3,6);
  blueEnd[1].x=centre-halfWidth;
