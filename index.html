@@ -914,7 +914,7 @@ $('transitionClose').onclick=()=>{
   dist(d.editReds[id],d.editBall)<dist(d.editReds[best],d.editBall)?id:best);
  regainTransitionBall(closest,{handover:true});
 };
-$('transitionFree').onclick=()=>setTransitionFreeMode(true);
+$('transitionFree').onclick=()=>setTransitionFreeMode(!transitionDemo?.freeMode);
 $('transitionStatus').onclick=()=>{if(transitionDemo?.freeMode&&!state.coachingOff)setTransitionFreeMode(false);};
 function updateTransitionFreeControls(d){
  $('transitionClose').setAttribute('aria-label',d?.interactive?'Ball an Rot übergeben und Verteidigung starten':'Animation schließen');
@@ -922,6 +922,7 @@ function updateTransitionFreeControls(d){
  $('pitch').classList.toggle('space-pass-enabled',!!d?.interactive&&!d?.freeMode&&!state.coachingOff);
  $('transitionFree').hidden=!d?.interactive;
  $('transitionFree').setAttribute('aria-pressed',String(!!d?.freeMode));
+ $('transitionFree').textContent=d?.freeMode?'Frei verschieben ausschalten':'Frei verschieben anschalten';
  $('transitionStatus').setAttribute('data-paused',String(!!d?.freeMode));
  $('transitionStatus').setAttribute('aria-pressed',String(!d?.freeMode));
  $('transitionStatus').setAttribute('title',state.coachingOff?'Coaching über Manuell oder Automatik An wieder einschalten':d?.freeMode?'Freies Verschieben ausschalten und Passprüfung wieder einschalten':'Passprüfung ist eingeschaltet');
@@ -1049,7 +1050,7 @@ function regainTransitionBall(id,{handover=false}={}){
 function moveTransitionPlayer(id,q,origin,team='blue'){
  const d=transitionDemo;if(!d?.interactive||d.play||d.pushUp)return;
  if(team==='blue'&&d.freeRuns)delete d.freeRuns.targets[id];
- if(team==='blue'){if(team===passingTeam(d))clearSpacePass(d);pauseDefense();}
+ if(team==='blue'&&!d.freeMode){if(team===passingTeam(d))clearSpacePass(d);pauseDefense();}
  d.editDirty=true;const position={x:clamp(q.x,2,66),y:clamp(q.y,3,102)},own=team===passingTeam(d),ps=teamPlayers(d,team),previous=ps[id];ps[id]=position;
  if(d.freeMode){if(own&&id===d.holder)d.editBall={...position};d.preview=null;return;}
  if(!own){if(demoPointSegment(d.editBall,previous,position)<=2.95){completePassPossession(d,team,id);return;}updateTransitionPreview();return;}
