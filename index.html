@@ -909,10 +909,17 @@ function renderTransitionDemo(dt){
  el('circle',{cx:ball.x,cy:ball.y,r:1.05,fill:'#fff',stroke:'#e8d37b','stroke-width':'.5'},root);
 }
 $('transitionStart').onclick=()=>transitionDemo?stopTransitionDemo():startTransitionDemo();
-$('transitionClose').onclick=stopTransitionDemo;
+$('transitionClose').onclick=()=>{
+ const d=transitionDemo;
+ if(!d?.interactive){stopTransitionDemo();return;}
+ const closest=redMidfieldIds().reduce((best,id)=>
+  dist(d.editReds[id],d.editBall)<dist(d.editReds[best],d.editBall)?id:best);
+ regainTransitionBall(closest,{handover:true});
+};
 $('transitionFree').onclick=()=>setTransitionFreeMode(true);
 $('transitionStatus').onclick=()=>{if(transitionDemo?.freeMode&&!state.coachingOff)setTransitionFreeMode(false);};
 function updateTransitionFreeControls(d){
+ $('transitionClose').setAttribute('aria-label',d?.interactive?'Ball an Rot übergeben und Verteidigung starten':'Animation schließen');
  $('transitionControls').setAttribute('data-free-mode',String(!!d?.freeMode));
  $('transitionControls').setAttribute('data-pass-check-active',String(!!d?.interactive&&!d?.freeMode&&!state.coachingOff));
  $('pitch').classList.toggle('space-pass-enabled',!!d?.interactive&&!d?.freeMode&&!state.coachingOff);
@@ -1027,17 +1034,19 @@ function finishTransitionDrag(e){
  if(d?.interactive)d.editDirty=true;
 }
 function updateTransitionPreview(){const d=transitionDemo;keepPassRedDistance(d);if(d?.interactive&&!d.freeMode&&!state.coachingOff){if(d.spacePreview)updateSpacePass(d,d.spacePreview.target);else if(d.preview)d.preview=transitionPassOption(d,d.preview.id,d.preview.origin,receivers(d)[d.preview.id]);}if(d?.interactive)d.editDirty=true;}
-function regainTransitionBall(id){
- const d=transitionDemo;if(!d?.interactive||d.play||d.freeMode||state.coachingOff)return false;
+function regainTransitionBall(id,{handover=false}={}){
+ const d=transitionDemo;if(!d?.interactive||(!handover&&(d.play||d.freeMode||state.coachingOff)))return false;
  const active=transitionDrag?.team==='red'&&transitionDrag.id===id?{...transitionDrag}:null;
  state.reds=d.editReds.map(p=>({...p}));
  blue=d.editPositions.map((p,i)=>({...p,row:d.bs[i].row??targets[i]?.row,vx:0,vy:0}));
  state.owner=id;regainedRedOwner=id;state.ball={...d.editBall};state.defensePaused=false;state.coachingPrompt=false;state.coachingOff=false;state.manualBlue={};state.recoveryEntry=true;state.recoveryRedPositions=true;ballPass=null;startLayoutSignature=null;
  previousAssignments={};previousSystem='';assignments={};assignmentNotes={};lastReport={};handoverNotice='';
- stopTransitionDemo();refresh();lastTime=0;
+ stopTransitionDemo();
+ if(handover)dock();
+ refresh();lastTime=0;
  // Keep an active red drag working when the exercise hands back to normal play.
  if(active)drag={kind:'red',index:id,id:active.pointer,startX:0,startY:0,moved:true,dx:active.dx,dy:active.dy};
- $('message').textContent='Ballgewinn Rot · '+playerLabel('red',id)+' hat den Ball. Automatik an · Blau verteidigt aus den aktuellen Positionen.';
+ $('message').textContent=(handover?'Ball an Rot übergeben · ':'Ballgewinn Rot · ')+playerLabel('red',id)+' hat den Ball. Automatik an · Blau verteidigt aus den aktuellen Positionen.';
  return true;
 }
 function moveTransitionPlayer(id,q,origin,team='blue'){
