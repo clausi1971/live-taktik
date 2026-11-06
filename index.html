@@ -774,6 +774,13 @@ function planTransitionSpaces(d){
  const occupied=[{...d.win},...(d.firstPass?[{...d.offer}]:[])];
  const ballCarrierIndex=occupied.length-1;
  const linkFrom=occupied[ballCarrierIndex];
+ if(d.holdAdvancedBackFour){
+  for(let id=1;id<=4;id++){
+   if(reserved.has(id))continue;
+   reserved.add(id);
+   occupied.push(targets[id]);
+  }
+ }
  const farSideMidfielders=new Set();
  for(const label of ['ZDM','ZM']){
   const group=d.bs.map((p,id)=>({p,id})).filter(({id})=>playerLabel('blue',id)===label);
@@ -1321,7 +1328,10 @@ function advancePushUp(d,dt){
   const from=move.blueStart[d.holder-1],to=d.editPositions[d.holder];
   d.editBall={x:move.ball.x+to.x-from.x,y:move.ball.y+to.y-from.y};
  }
- if(progress===1)d.pushUp=null;
+ if(progress===1){
+  d.pushUp=null;
+  d.holdAdvancedBackFour=true;
+ }
  d.editDirty=true;
 }
 
@@ -1339,7 +1349,7 @@ function drawPushUpControl(d,root){
 function planPassFreeRuns(d){
  const p=d.play;if(!p||d.freeMode||state.coachingOff)return;
  const source=d.holder??d.editPositions.map((q,id)=>({id,d:dist(q,d.editBall)})).sort((a,b)=>a.d-b.d)[0].id;
- const scene={livePass:true,bs:d.editPositions.map(q=>({...q})),rs:d.editReds.map(q=>({...q})),winner:source,receiver:p.id,win:{...d.editBall},offer:{...(p.kind==='space'?p.spaceTarget:p.receive)},firstPass:true};
+ const scene={livePass:true,holdAdvancedBackFour:d.holdAdvancedBackFour,bs:d.editPositions.map(q=>({...q})),rs:d.editReds.map(q=>({...q})),winner:source,receiver:p.id,win:{...d.editBall},offer:{...(p.kind==='space'?p.spaceTarget:p.receive)},firstPass:true};
  const planned=planTransitionSpaces(scene),targets={};planned.forEach((q,id)=>{if(id&&id!==p.id&&dist(q,d.editPositions[id])>.05)targets[id]={...q};});
  d.freeRuns={targets,source,delay:p.launchDelay||0,age:0};d.freeRunRoles=scene.spaceRoles;
 }
