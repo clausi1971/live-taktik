@@ -1206,8 +1206,11 @@ function startPushUp(d){
  if(d!==transitionDemo||!canPushUp(d))return;
  const blueStart=d.editPositions.slice(1,5).map(p=>({...p}));
  const redStart=d.editReds.slice(1).map(p=>({...p}));
- const redFront=Math.min(...redStart.map(p=>p.y));
- const redBack=Math.max(...redStart.map(p=>p.y));
+ const holdingMidfielders=d.editPositions.filter((_,id)=>playerLabel('blue',id)==='ZDM');
+ const isStriker=i=>holdingMidfielders.length>0&&playerLabel('red',i+1)==='ST';
+ const redBlock=redStart.filter((_,i)=>!isStriker(i));
+ const redFront=Math.min(...redBlock.map(p=>p.y));
+ const redBack=Math.max(...redBlock.map(p=>p.y));
  const available=Math.max(0,redFront-1);
  const goalSideGap=3;
  const lead=Math.max(0,redBack-Math.min(...blueStart.map(p=>p.y))+goalSideGap);
@@ -1228,8 +1231,22 @@ function startPushUp(d){
   return;
  }
  const redSpeed=state.redMaxSpeed/3.6;
- d.pushUp={blueStart,blueEnd,redStart,lead,shift,leadTime:lead/redSpeed,
-  duration:Math.max(...blueStart.map((p,i)=>dist(p,blueEnd[i])/(state.maxSpeed/3.6)),(shift-lead)/redSpeed),
+ const redReady=redStart.map(p=>({...p,y:p.y-lead}));
+ const redEnd=redStart.map(p=>({...p,y:p.y-shift}));
+ redStart.forEach((p,i)=>{
+  if(!isStriker(i))return;
+  const defender=Math.abs(p.x-blueEnd[1].x)<=Math.abs(p.x-blueEnd[2].x)?1:2;
+  const iv=blueEnd[defender].y;
+  const zdm=Math.max(...holdingMidfielders.filter(q=>q.y<=iv-5).map(q=>q.y));
+  redReady[i].y=Math.max(1,Math.min(p.y,blueStart[defender].y-3));
+  redEnd[i].y=Number.isFinite(zdm)
+   ?iv-clamp((iv-zdm)/3,2.1,4)
+   :Math.max(1,Math.min(p.y-shift,iv-3));
+ });
+ const leadTime=Math.max(...redStart.map((p,i)=>dist(p,redReady[i])))/redSpeed;
+ d.pushUp={blueStart,blueEnd,redStart,redReady,redEnd,leadTime,
+  duration:Math.max(...blueStart.map((p,i)=>dist(p,blueEnd[i])/(state.maxSpeed/3.6)),
+   ...redReady.map((p,i)=>dist(p,redEnd[i])/redSpeed)),
   elapsed:0,ball:{...d.editBall}};
  d.editDirty=true;
 }
@@ -1238,8 +1255,11 @@ function advancePushUp(d,dt){
  const move=d.pushUp;
  move.elapsed+=Math.max(0,dt);
  const progress=clamp((move.elapsed-move.leadTime)/move.duration,0,1);
- const shift=move.elapsed<move.leadTime?move.lead*move.elapsed/move.leadTime:move.lead+(move.shift-move.lead)*progress;
- move.redStart.forEach((p,i)=>{d.editReds[i+1]={...p,y:p.y-shift};});
+ move.redStart.forEach((p,i)=>{
+  d.editReds[i+1]=move.elapsed<move.leadTime
+   ?demoMix(p,move.redReady[i],move.elapsed/move.leadTime)
+   :demoMix(move.redReady[i],move.redEnd[i],progress);
+ });
  move.blueStart.forEach((p,i)=>{d.editPositions[i+1]=demoMix(p,move.blueEnd[i],progress);});
  if(d.holder>=1&&d.holder<=4){
   const from=move.blueStart[d.holder-1],to=d.editPositions[d.holder];
