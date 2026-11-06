@@ -1207,14 +1207,7 @@ function startPushUp(d){
  const blueStart=d.editPositions.slice(1,5).map(p=>({...p}));
  const redStart=d.editReds.slice(1).map(p=>({...p}));
  const holdingMidfielders=d.editPositions.filter((_,id)=>playerLabel('blue',id)==='ZDM');
- const isStriker=i=>holdingMidfielders.length>0&&playerLabel('red',i+1)==='ST';
- const redBlock=redStart.filter((_,i)=>!isStriker(i));
- const redFront=Math.min(...redBlock.map(p=>p.y));
- const redBack=Math.max(...redBlock.map(p=>p.y));
- const available=Math.max(0,redFront-1);
- const goalSideGap=3;
- const lead=Math.max(0,redBack-Math.min(...blueStart.map(p=>p.y))+goalSideGap);
- const depthLimit=Math.max(3,redBack-available+goalSideGap);
+ const depthLimit=3;
  const near=dist(blueStart[0],d.editBall)<=dist(blueStart[3],d.editBall)?0:3;
  const far=3-near;
  const blueEnd=blueStart.map((p,i)=>({...p,y:Math.min(p.y,Math.max(depthLimit,p.y-(i===near?12:8)))}));
@@ -1225,23 +1218,22 @@ function startPushUp(d){
  const adjacent=far===0?1:2;
  blueEnd[far].x=clamp(blueEnd[adjacent].x+(far===0?-5:5),2,66);
  blueEnd[far].y=Math.max(depthLimit,blueEnd[adjacent].y-2);
- const shift=Math.max(lead,redBack-Math.min(...blueEnd.map(p=>p.y))+goalSideGap,0);
- if(shift>available+1e-7||blueEnd.every((p,i)=>p.y>=blueStart[i].y-1e-7)){
-  $('transitionStatus').textContent='Zum Aufrücken fehlt Platz auf der roten Torseite.';
+ if(blueEnd.every((p,i)=>p.y>=blueStart[i].y-1e-7)){
+  $('transitionStatus').textContent='Zum Aufrücken fehlt Platz vor der blauen Abwehr.';
   return;
  }
  const redSpeed=state.redMaxSpeed/3.6;
- const redReady=redStart.map(p=>({...p,y:p.y-lead}));
- const redEnd=redStart.map(p=>({...p,y:p.y-shift}));
+ const redReady=redStart.map(p=>({...p}));
+ const redEnd=redStart.map(p=>({...p,y:Math.max(1,p.y-1)}));
  redStart.forEach((p,i)=>{
-  if(!isStriker(i))return;
+  if(playerLabel('red',i+1)!=='ST')return;
   const defender=Math.abs(p.x-blueEnd[1].x)<=Math.abs(p.x-blueEnd[2].x)?1:2;
   const iv=blueEnd[defender].y;
   const zdm=Math.max(...holdingMidfielders.filter(q=>q.y<=iv-5).map(q=>q.y));
   redReady[i].y=Math.max(1,Math.min(p.y,blueStart[defender].y-3));
   redEnd[i].y=Number.isFinite(zdm)
    ?iv-clamp((iv-zdm)/3,2.1,4)
-   :Math.max(1,Math.min(p.y-shift,iv-3));
+   :Math.max(1,Math.min(p.y,iv-3));
  });
  const leadTime=Math.max(...redStart.map((p,i)=>dist(p,redReady[i])))/redSpeed;
  d.pushUp={blueStart,blueEnd,redStart,redReady,redEnd,leadTime,
