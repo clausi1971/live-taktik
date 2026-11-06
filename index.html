@@ -1224,7 +1224,7 @@ function startPushUp(d){
  blueEnd[2].x=centre+halfWidth;
  const adjacent=far===0?1:2;
  blueEnd[far].x=clamp(blueEnd[adjacent].x+(far===0?-5:5),2,66);
- blueEnd[far].y=Math.max(depthLimit,(blueEnd[1].y+blueEnd[2].y)/2);
+ blueEnd[far].y=Math.max(depthLimit,blueEnd[adjacent].y-2);
  const shift=Math.max(lead,redBack-Math.min(...blueEnd.map(p=>p.y))+goalSideGap,0);
  if(shift>available+1e-7||blueEnd.every((p,i)=>p.y>=blueStart[i].y-1e-7)){
   $('transitionStatus').textContent='Zum Aufrücken fehlt Platz auf der roten Torseite.';
