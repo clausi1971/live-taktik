@@ -781,6 +781,10 @@ function planTransitionSpaces(d){
   group.sort((a,b)=>Math.abs(b.p.x-linkFrom.x)-Math.abs(a.p.x-linkFrom.x)||dist(b.p,linkFrom)-dist(a.p,linkFrom)||a.id-b.id);
   farSideMidfielders.add(group[0].id);
  }
+ const midfieldReferenceIds=d.bs.map((_,id)=>id).filter(id=>playerLabel('blue',id)==='ZOM');
+ if(!midfieldReferenceIds.length){
+  midfieldReferenceIds.push(...d.bs.map((_,id)=>id).filter(id=>playerLabel('blue',id)==='ZM'));
+ }
  let index=1;
  shape.forEach((count,row)=>{for(let col=0;col<count;col++,index++){
   const id=index,start=d.bs[id];if(reserved.has(id))continue;
@@ -788,6 +792,10 @@ function planTransitionSpaces(d){
   const limited=farSideMidfielders.has(id);
   const wide=!limited&&!cb&&count>=3&&(col===0||col===count-1);
   const central=!wide&&!cb;
+  const striker=row===shape.length-1&&playerLabel('blue',id)==='ST';
+  const reference=striker?midfieldReferenceIds
+   .map(i=>d.firstPass&&i===d.receiver?d.offer:targets[i])
+   .sort((a,b)=>Math.abs(a.x-start.x)-Math.abs(b.x-start.x))[0]:null;
   const farSideIsRight=linkFrom.x===34?start.x>=34:linkFrom.x<34;
   const minX=farSideIsRight?27.2:13.6,maxX=farSideIsRight?54.4:40.8;
   const side=col===0?'left':'right';
@@ -796,8 +804,11 @@ function planTransitionSpaces(d){
   else if(wide){kind='wide';roleX=side==='left'?6:62;roleY=row===0?(lines.at(-1)+(lines.at(-2)??lines[0]))/2:(lines[0]+(lines[1]??lines[0]+16))/2;}
   else if(row===shape.length-1){kind='seam';roleX=34+(col-(count-1)/2)*12;roleY=lines[0]+3;}
   else{const band=row===1&&shape.length>=4?Math.min(1,lines.length-2):0;roleY=(lines[band]+lines[Math.min(band+1,lines.length-1)])/2;}
+  if(reference)roleY=reference.y-5;
   if(limited)roleX=clamp(roleX,minX,maxX);
-  const xs=new Set([roleX,...[-8,-4,4,8].map(n=>roleX+n)]),ys=new Set([-6,-3,0,3,6].map(n=>roleY+n));
+  const xs=new Set([roleX,...[-8,-4,4,8].map(n=>roleX+n)]);
+  const ys=new Set(reference?[roleY]:[-6,-3,0,3,6].map(n=>roleY+n));
+  if(reference)xs.add(reference.x);
   if(wide){xs.clear();for(const x of side==='left'?[4,6,8,10]:[58,60,62,64])xs.add(x);}
   if(cb){ys.clear();for(const offset of [6,8,10,12])ys.add(front+offset);}
   if(!wide&&!cb)for(const chain of chains)for(let j=1;j<chain.length;j++)xs.add((chain[j-1].x+chain[j].x)/2);
@@ -822,7 +833,10 @@ function planTransitionSpaces(d){
   };
   for(const x of xs)for(const y of ys)evaluate({x,y});
   // When the ideal gap is too far away, first move into nearby available space.
-  if(!choices.length)for(let dx=-12;dx<=12;dx+=3)for(let dy=-12;dy<=12;dy+=3)evaluate({x:start.x+dx,y:start.y+dy});
+  if(!choices.length)for(let dx=-12;dx<=12;dx+=3){
+   if(reference)evaluate({x:start.x+dx,y:roleY});
+   else for(let dy=-12;dy<=12;dy+=3)evaluate({x:start.x+dx,y:start.y+dy});
+  }
   const best=choices.sort((a,b)=>b.score-a.score)[0];if(best)targets[id]={...start,...best.q};
   details[id]={kind,roleX,roleY,planned:!!best};occupied.push(targets[id]);
  }});
