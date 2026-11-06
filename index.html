@@ -772,11 +772,14 @@ function planTransitionSpaces(d){
  const lines=chains.map(meanY),front=Math.max(...chains.at(-1).map(p=>p.y));
  const targets=d.bs.map(p=>({...p})),details={},reserved=new Set([0,...(d.livePass?[]:[d.winner]),...(d.firstPass?[d.receiver]:[])]);
  const occupied=[{...d.win},...(d.firstPass?[{...d.offer}]:[])];
+ const ballCarrierIndex=occupied.length-1;
+ const linkFrom=occupied[ballCarrierIndex];
  let index=1;
  shape.forEach((count,row)=>{for(let col=0;col<count;col++,index++){
   const id=index,start=d.bs[id];if(reserved.has(id))continue;
   const cb=row===0&&(count===3||(col>0&&col<count-1));
   const wide=!cb&&count>=3&&(col===0||col===count-1);
+  const central=!wide&&!cb;
   const side=col===0?'left':'right';
   let roleX=start.x,roleY=start.y,kind='between-lines';
   if(cb){kind='centre-back';roleX=count===3?(col+1)*17:count===5?17+(col-1)*17:col===1?23:45;roleY=clamp(front+9,12,95);}
@@ -789,7 +792,8 @@ function planTransitionSpaces(d){
   if(!wide&&!cb)for(const chain of chains)for(let j=1;j<chain.length;j++)xs.add((chain[j-1].x+chain[j].x)/2);
   const choices=[];
   const evaluate=q=>{
-   if(q.x<3||q.x>65||q.y<7||q.y>98||dist(start,q)>state.maxSpeed/3.6*4||occupied.some(p=>dist(p,q)<5))return;
+   if(q.x<3||q.x>65||q.y<7||q.y>98||dist(start,q)>state.maxSpeed/3.6*4||
+    occupied.some((p,i)=>dist(p,q)<(central&&i===ballCarrierIndex?4:5)))return;
    const distances=reds.slice(1).map(p=>dist(p,q)).sort((a,b)=>a-b);if(distances[0]<4.5)return;
    // Do not run straight through an opponent while moving into the chosen gap.
    for(let r=1;r<reds.length;r++){
@@ -797,9 +801,9 @@ function planTransitionSpaces(d){
     if(initial>=2.6&&demoPointSegment(p,start,q)<2.6)return;
     if(initial<2.6&&(q.x-start.x)*(start.x-p.x)+(q.y-start.y)*(start.y-p.y)<0)return;
    }
-   const neighbours=occupied.filter(p=>dist(p,q)<30&&(d.livePass?reds.every(red=>demoPointSegment(red,p,q)>=3.4):demoLaneClear(d.rs,p,q,5,6))).length;
-   const linkFrom=d.firstPass?d.offer:d.win;
    const ballLink=d.livePass?demoPassUncatchable(reds,linkFrom,q,ballTravelTime(dist(linkFrom,q))):demoPassClear(d.rs,linkFrom,q,6,6+Math.max(.3,Math.min(passSpeed/ballDeceleration,ballTravelTime(dist(linkFrom,q)))));
+   if(central&&!ballLink)return;
+   const neighbours=occupied.filter(p=>dist(p,q)<30&&(d.livePass?reds.every(red=>demoPointSegment(red,p,q)>=3.4):demoLaneClear(d.rs,p,q,5,6))).length;
    const room=cb?Math.min(10,distances[0]):Math.min(14,distances[0]);
    const score=room*2.5+Math.min(18,distances[1])*.3+Math.min(3,neighbours)*2+(ballLink?4:0)-dist(start,q)*.25-Math.abs(q.x-roleX)*.55-Math.abs(q.y-roleY)*.4;
    choices.push({q,score});
