@@ -1042,6 +1042,7 @@ function advanceTransitionPass(d,dt){
  p.elapsed=Math.min(end,p.elapsed+Math.max(0,dt));
  receivers(d)[p.id]=demoMix(p.origin,p.target,p.runTime>0?p.elapsed/p.runTime:1);
  d.editBall=deceleratingBallAt(p.startBall,p.receive,Math.max(0,p.elapsed-p.launchDelay));d.editDirty=true;
+ advanceNearestRed(d,p);
  if(p.interception){const hit=p.interception;const reaction=hit.reactionTime??0;const progress=p.elapsed<=reaction?0:hit.time>reaction?(p.elapsed-reaction)/(hit.time-reaction):1;opponents(d)[hit.id]=demoMix(p.redOrigin,hit.runEnd,progress);}
  if(p.elapsed>=end){
   if(p.interception){const id=p.interception.id;d.play=null;completePassPossession(d,opposingTeam(d),id);}
@@ -1219,6 +1220,7 @@ function advanceSpacePass(d,dt){
   (team==='blue'?d.editPositions:d.editReds)[candidate.id]=q;
  }
  d.editBall=spaceBallAt(race.path,p.elapsed);d.editDirty=true;
+ advanceNearestRed(d,p);
  if(p.elapsed>=p.time){d.play=null;completePassPossession(d,race.redWins?'red':'blue',race.redWins?race.red.id:race.blue.id);}
 }
 function drawSpaceArrow(root,a,b,color){
@@ -1406,6 +1408,8 @@ function drawPushUpControl(d,root){
 }
 function planPassFreeRuns(d){
  const p=d.play;if(!p||d.freeMode||state.coachingOff)return;
+ const closest=d.editReds.map((q,id)=>({id,distance:dist(q,p.startBall)})).sort((a,b)=>a.distance-b.distance||a.id-b.id)[0];
+ p.nearestRed={id:closest.id,elapsed:0};
  const source=d.holder??d.editPositions.map((q,id)=>({id,d:dist(q,d.editBall)})).sort((a,b)=>a.d-b.d)[0].id;
  const scene={livePass:true,holdAdvancedBackFour:d.holdAdvancedBackFour,bs:d.editPositions.map(q=>({...q})),rs:d.editReds.map(q=>({...q})),winner:source,receiver:p.id,win:{...d.editBall},offer:{...(p.kind==='space'?p.spaceTarget:p.receive)},firstPass:true};
  const planned=planTransitionSpaces(scene),targets={};planned.forEach((q,id)=>{
@@ -1415,6 +1419,16 @@ function planPassFreeRuns(d){
   if(dist(q,d.editPositions[id])>.05)targets[id]={...q};
  });
  d.freeRuns={targets,source,delay:p.launchDelay||0,age:0};d.freeRunRoles=scene.spaceRoles;
+}
+function advanceNearestRed(d,pass){
+ const chase=pass.nearestRed;if(!chase)return;
+ const delay=pass.kind==='space'?0:redReactionTime;
+ const seconds=Math.max(0,pass.elapsed-delay)-Math.max(0,chase.elapsed-delay);chase.elapsed=pass.elapsed;
+ // The predicted interceptor already follows its calculated shortest route.
+ const interceptor=pass.kind==='space'?pass.race.red.id:pass.interception?.id;
+ if(chase.id===interceptor||seconds<=0)return;
+ const origin=d.editReds[chase.id],distance=dist(origin,d.editBall),step=Math.min(Math.max(0,distance-2.95),state.redMaxSpeed/3.6*seconds);
+ if(step>0)d.editReds[chase.id]=demoMix(origin,d.editBall,step/distance);
 }
 function advancePassFreeRuns(d,seconds){
  if(!d.freeRuns||d.freeMode||state.coachingOff)return;const runs=d.freeRuns,oldAge=runs.age;runs.age+=Math.max(0,seconds);let moved=false;
