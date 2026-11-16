@@ -1065,6 +1065,13 @@ function renderTransitionInteractive(d){
  updateTransitionFreeControls(d);
  if(d.editRendered&&!d.editDirty)return;d.editRendered=true;d.editDirty=false;
  const root=$('transitionLayer');root.replaceChildren();
+ if(d.freeMode){
+  let first=1;
+  formations[state.blueFormation].forEach((count,row)=>{
+   const members=d.editPositions.slice(first,first+count).sort((a,b)=>a.x-b.x);first+=count;
+   if(members.length>1)el('polyline',{points:members.map(q=>q.x+','+q.y).join(' '),fill:'none',stroke:chainColors[row],'stroke-width':'.22','stroke-opacity':'.5','stroke-linejoin':'round','pointer-events':'none','data-coaching-chain':row},root);
+  });
+ }
  const p=d.preview;
  drawSpacePassPreview(d,root);
  const message=d.pushUp?'Aufrücken · Zentrum absichern':d.spacePreview?spacePassMessage(d.spacePreview):d.play?.kind==='space'?'Raumpass · Blau und Rot laufen zum Ball':d.freeMode?'Frei verschieben aus':d.play?(d.play.interception?(d.play.elapsed<redReactionTime?'Riskanter Pass · '+teamName(opposingTeam(d))+' reagiert gleich':'Riskanter Pass · '+teamName(opposingTeam(d))+' läuft zum Ball'):d.play.elapsed<d.play.launchDelay?teamName(passingTeam(d))+' startet – Pass folgt':'Pass in den Lauf · Ball und '+teamName(passingTeam(d))+' unterwegs'):!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.flightTime.toFixed(1)+' s · Lauf '+p.runTime.toFixed(1)+' s':p.unreachable?'Ziel zu weit · Ball stoppt nach 35,7 m':p.flightTime<=.05?'Ziel weiter vom Ball wählen':'Riskanter Pass · Freigabe: '+teamName(opposingTeam(d))+' kann abfangen';
