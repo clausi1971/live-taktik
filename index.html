@@ -828,6 +828,8 @@ function planTransitionSpaces(d){
   const farSideIsRight=linkFrom.x===34?start.x>=34:linkFrom.x<34;
   const minX=farSideIsRight?27.2:13.6,maxX=farSideIsRight?54.4:40.8;
   const side=col===0?'left':'right';
+  const fullbackLabel=playerLabel('blue',id);
+  const oppositeMidfielder=d.livePass&&['LV','RV'].includes(fullbackLabel)?reds.find((_,r)=>playerLabel('red',r)===(fullbackLabel==='LV'?'LM':'RM')):null;
   let roleX=start.x,roleY=start.y,kind='between-lines';
   if(cb){kind='centre-back';roleX=count===3?(col+1)*17:count===5?17+(col-1)*17:col===1?23:45;roleY=clamp(front+9,12,95);}
   else if(wide){kind='wide';roleX=side==='left'?6:62;roleY=row===0?(lines.at(-1)+(lines.at(-2)??lines[0]))/2:(lines[0]+(lines[1]??lines[0]+16))/2;}
@@ -843,6 +845,7 @@ function planTransitionSpaces(d){
   if(!wide&&!cb)for(const chain of chains)for(let j=1;j<chain.length;j++)xs.add((chain[j-1].x+chain[j].x)/2);
   const choices=[];
   const evaluate=q=>{
+   if(oppositeMidfielder&&q.y<oppositeMidfielder.y)return;
    if(d.livePass&&!cb&&q.y>start.y-.25)return;
    if(limited&&(q.x<minX||q.x>maxX))return;
    if(q.x<3||q.x>65||q.y<7||q.y>98||dist(start,q)>state.maxSpeed/3.6*4||
@@ -1401,7 +1404,12 @@ function planPassFreeRuns(d){
  const p=d.play;if(!p||d.freeMode||state.coachingOff)return;
  const source=d.holder??d.editPositions.map((q,id)=>({id,d:dist(q,d.editBall)})).sort((a,b)=>a.d-b.d)[0].id;
  const scene={livePass:true,holdAdvancedBackFour:d.holdAdvancedBackFour,bs:d.editPositions.map(q=>({...q})),rs:d.editReds.map(q=>({...q})),winner:source,receiver:p.id,win:{...d.editBall},offer:{...(p.kind==='space'?p.spaceTarget:p.receive)},firstPass:true};
- const planned=planTransitionSpaces(scene),targets={};planned.forEach((q,id)=>{if(id&&id!==p.id&&dist(q,d.editPositions[id])>.05)targets[id]={...q};});
+ const planned=planTransitionSpaces(scene),targets={};planned.forEach((q,id)=>{
+  if(!id||id===p.id)return;
+  const label=playerLabel('blue',id),midfielder=['LV','RV'].includes(label)?d.editReds.find((_,r)=>playerLabel('red',r)===(label==='LV'?'LM':'RM')):null;
+  if(midfielder)q={...q,y:Math.max(q.y,midfielder.y)};
+  if(dist(q,d.editPositions[id])>.05)targets[id]={...q};
+ });
  d.freeRuns={targets,source,delay:p.launchDelay||0,age:0};d.freeRunRoles=scene.spaceRoles;
 }
 function advancePassFreeRuns(d,seconds){
