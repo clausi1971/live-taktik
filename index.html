@@ -717,7 +717,7 @@ function changeFormation(team,formation){
  $('message').textContent='Startaufstellung: Angriff '+state.redFormation+' · Verteidigung '+state.blueFormation+'.';
 }
 for(let team of ['red','blue']){let select=$(team+'Formation');Object.keys(formations).forEach(f=>{let o=document.createElement('option');o.value=f;o.textContent=f;select.append(o);});select.addEventListener('change',()=>changeFormation(team,select.value));}
-for(let k of ['pressure','cover','double','p12','p13','p14'])$(k).onclick=()=>{state[k]=!state[k];if(state[k]&&k==='cover')state.double=false;if(state[k]&&k==='double')state.cover=false;refresh();};$('maxSpeed').oninput=e=>{state.maxSpeed=+e.target.value;updateMotionReadout();updateTransitionPreview();};$('redMaxSpeed').oninput=e=>{state.redMaxSpeed=+e.target.value;updateMotionReadout();if(transitionDemo?.interactive)updateTransitionPreview();else if(transitionDemo)startTransitionDemo();};$('spacing').oninput=e=>{state.spacing=+e.target.value;refresh();};$('highlightChains').onclick=()=>{state.highlightChains=!state.highlightChains;updateChainControls();};$('explain').onclick=()=>{state.explanations=!state.explanations;refresh();};
+for(let k of ['pressure','cover','double','p12','p13','p14'])$(k).onclick=()=>{state[k]=!state[k];if(state[k]&&k==='cover')state.double=false;if(state[k]&&k==='double')state.cover=false;refresh();};$('maxSpeed').oninput=e=>{state.maxSpeed=+e.target.value;updateMotionReadout();updateTransitionPreview();};$('redMaxSpeed').oninput=e=>{state.redMaxSpeed=+e.target.value;updateMotionReadout();if(transitionDemo?.interactive)updateTransitionPreview();else if(transitionDemo)startTransitionDemo();};$('spacing').oninput=e=>{state.spacing=+e.target.value;refresh();};$('highlightChains').onclick=()=>{state.highlightChains=!state.highlightChains;updateChainControls();if(transitionDemo?.interactive)transitionDemo.editDirty=true;};$('explain').onclick=()=>{state.explanations=!state.explanations;refresh();};
 $('reset').onclick=()=>{Object.assign(state,{redFormation:'4-3-3',blueFormation:'4-2-3-1',spacing:12,maxSpeed:16,redMaxSpeed:16,depthOffset:-4,p12:false,p13:false,p14:false,pressure:true,cover:false,double:false,fieldZones:false,holdPositions:true,highlightChains:false,defensePaused:false,coachingOff:false,coachingPrompt:false,owner:6});$('redFormation').value=state.redFormation;$('blueFormation').value=state.blueFormation;$('spacing').value=12;$('maxSpeed').value=16;$('redMaxSpeed').value=16;state.manualBlue={};blue=[];lastTime=0;previousAssignments={};handoverNotice='';applyStartLayout();refresh();};
 $('toggleDepth').onclick=()=>{depthPanelOpen=!depthPanelOpen;updateDepthUI();};$('teamDepth').oninput=e=>{state.depthOffset=+e.target.value;refresh();};$('depthHigher').onclick=()=>{state.depthOffset=clamp(state.depthOffset-2,-20,20);refresh();};$('depthDeeper').onclick=()=>{state.depthOffset=clamp(state.depthOffset+2,-20,20);refresh();};$('depthDefault').onclick=()=>{state.depthOffset=-4;refresh();};
 $('save').onclick=()=>{let a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify({version:2,app:'kompakt-v2',...state},null,2)],{type:'application/json'}));a.href=url;a.download='kompakt-version2-spielszene.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('message').textContent='Spielszene als Datei gespeichert.';};$('load').onclick=()=>$('file').click();
@@ -897,7 +897,7 @@ function renderTransitionDemo(dt){
  d.interactive=true;d.paused=true;d.editPositions=demoBlueAt(d,6);d.editReds=d.rs.map((p,id)=>demoRedAt(p,id,6));d.editBall={...(d.firstPass?d.offer:d.win)};d.holder=d.firstPass?d.receiver:d.winner;
  renderTransitionInteractive(d);return;
  }}const t=d.time,root=$('transitionLayer');root.replaceChildren();
- const ps=demoBlueAt(d,t);
+ const ps=demoBlueAt(d,t);drawTransitionChains(ps,root);
  let ball=t<2?demoMix(d.ball,d.win,t/2):t<6?firstActionBall(d,t):!d.secondPass||t<9?ps[d.receiver]:t<11?demoMix(d.carry,d.deep,(t-9)/2):ps[d.runner];
  const stage=t<2?'1 · Ballgewinn':t<5?'2 · Räume und Lücken besetzen · einer kommt sicher entgegen':t<6?'3 · Sicher in den Lauf passen':t<9?'4 · Freilaufen – Breite und Tiefe anbieten':t<11?'5 · Freien Spieler nach vorne anspielen':t<15?'6 · Nach dem Abspiel selbst in die Tiefe starten':'Animation beendet · Wiederholen oder schließen';
  $('transitionStatus').textContent=t>=2&&!d.firstPass?'Ball sichern · noch kein freier Passweg':t>=6&&!d.secondPass?'Erster Pass sicher · Ball halten, bis der Weg nach vorne frei ist':stage;
@@ -1060,18 +1060,24 @@ function moveTransitionPlayer(id,q,origin,team='blue'){
  if(id===d.holder){d.editBall={...position};d.preview=null;const hit=opponents(d).findIndex(p=>dist(p,d.editBall)<=2.95);if(hit>=0)completePassPossession(d,opposingTeam(d),hit);}
  else d.preview=transitionPassOption(d,id,origin,position);
 }
+function drawTransitionChains(positions,root){
+ let first=1;
+ formations[state.blueFormation].forEach((count,row)=>{
+  const members=positions.slice(first,first+count).sort((a,b)=>a.x-b.x);first+=count;
+  const color=chainColors[row],points=members.map(q=>q.x+','+q.y).join(' ');
+  if(members.length>1){
+   if(state.highlightChains)el('polyline',{points,fill:'none',stroke:color,'stroke-width':'2.1','stroke-opacity':'.18','stroke-linejoin':'round','pointer-events':'none'},root);
+   el('polyline',{points,fill:'none',stroke:color,'stroke-width':state.highlightChains?'.65':'.22','stroke-opacity':state.highlightChains?'.95':'.5','stroke-linejoin':'round','pointer-events':'none','data-transition-chain':row},root);
+  }
+  if(state.highlightChains)members.forEach(q=>el('circle',{cx:q.x,cy:q.y,r:'2.55',fill:'none',stroke:color,'stroke-width':'.65','pointer-events':'none'},root));
+ });
+}
 function renderTransitionInteractive(d){
  if(keepPassRedDistance(d))updateTransitionPreview();
  updateTransitionFreeControls(d);
  if(d.editRendered&&!d.editDirty)return;d.editRendered=true;d.editDirty=false;
  const root=$('transitionLayer');root.replaceChildren();
- if(d.freeMode){
-  let first=1;
-  formations[state.blueFormation].forEach((count,row)=>{
-   const members=d.editPositions.slice(first,first+count).sort((a,b)=>a.x-b.x);first+=count;
-   if(members.length>1)el('polyline',{points:members.map(q=>q.x+','+q.y).join(' '),fill:'none',stroke:chainColors[row],'stroke-width':'.22','stroke-opacity':'.5','stroke-linejoin':'round','pointer-events':'none','data-coaching-chain':row},root);
-  });
- }
+ drawTransitionChains(d.editPositions,root);
  const p=d.preview;
  drawSpacePassPreview(d,root);
  const message=d.pushUp?'Aufrücken · Zentrum absichern':d.spacePreview?spacePassMessage(d.spacePreview):d.play?.kind==='space'?'Raumpass · Blau und Rot laufen zum Ball':d.freeMode?'Frei verschieben aus':d.play?(d.play.interception?(d.play.elapsed<redReactionTime?'Riskanter Pass · '+teamName(opposingTeam(d))+' reagiert gleich':'Riskanter Pass · '+teamName(opposingTeam(d))+' läuft zum Ball'):d.play.elapsed<d.play.launchDelay?teamName(passingTeam(d))+' startet – Pass folgt':'Pass in den Lauf · Ball und '+teamName(passingTeam(d))+' unterwegs'):!p?'Spieler verschieben – Passweg prüfen':p.possible?'Pass möglich · Ball '+p.flightTime.toFixed(1)+' s · Lauf '+p.runTime.toFixed(1)+' s':p.unreachable?'Ziel zu weit · Ball stoppt nach 35,7 m':p.flightTime<=.05?'Ziel weiter vom Ball wählen':'Riskanter Pass · Freigabe: '+teamName(opposingTeam(d))+' kann abfangen';
