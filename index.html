@@ -918,6 +918,7 @@ $('transitionClose').onclick=()=>{
 $('transitionFree').onclick=()=>setTransitionFreeMode(!transitionDemo?.freeMode);
 $('transitionStatus').onclick=()=>{if(transitionDemo?.freeMode&&!state.coachingOff)setTransitionFreeMode(false);};
 function updateTransitionFreeControls(d){
+ $('transitionControls').hidden=!d||!!d.freeMode;
  $('transitionClose').setAttribute('aria-label',d?.interactive?'Ball an Rot übergeben und Verteidigung starten':'Animation schließen');
  $('transitionControls').setAttribute('data-pass-check-active',String(!!d?.interactive&&!d?.freeMode&&!state.coachingOff));
  $('pitch').classList.toggle('space-pass-enabled',!!d?.interactive&&!d?.freeMode&&!state.coachingOff);
