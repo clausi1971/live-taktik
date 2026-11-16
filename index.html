@@ -1011,7 +1011,8 @@ function firstReachTime(origin,ballAt,end,speed,reaction,radius,breaks=[],startT
 }
 function rollingInterception(origin,id,a,b,duration,launchDelay=0,reactionTime=redReactionTime,kmh=state.redMaxSpeed,radius=3.4){
  const at=t=>deceleratingBallAt(a,b,Math.max(0,t-launchDelay)),speed=kmh/3.6;
- const time=firstReachTime(origin,at,launchDelay+duration,speed,reactionTime,radius,[launchDelay,reactionTime]);if(time===null)return null;
+ const arrival=launchDelay+ballTravelTime(dist(a,b));
+ const time=firstReachTime(origin,at,launchDelay+duration,speed,reactionTime,radius,[launchDelay,reactionTime,arrival]);if(time===null)return null;
  const point=at(time),distance=dist(origin,point),runEnd=demoMix(origin,point,distance?Math.max(0,(distance-radius)/distance):0);
  return{id,time,point,runEnd,reactionTime};
 }
@@ -1022,8 +1023,8 @@ function transitionPassOption(d,id,origin,target){
  // The dragged destination is the reception point, rather than an early interception of the run.
  const receive={...target},flightTime=ballTravelTime(dist(d.editBall,receive));
  const reachable=Number.isFinite(flightTime);if(!reachable)return{id,origin:{...origin},target:{...target},receive,time:0,flightTime:0,launchDelay:0,runTime,interceptors:[],possible:false,unreachable:true};
- const launchDelay=Math.max(0,runTime-flightTime),time=launchDelay+flightTime;
- const interceptors=opponents(d).map((red,id)=>rollingInterception(red,id,d.editBall,receive,flightTime,launchDelay,redReactionTime,teamSpeed(opposingTeam(d)))).filter(Boolean);
+ const launchDelay=0,time=Math.max(runTime,flightTime);
+ const interceptors=opponents(d).map((red,id)=>rollingInterception(red,id,d.editBall,receive,time,0,redReactionTime,teamSpeed(opposingTeam(d)))).filter(Boolean);
  return{id,origin:{...origin},target:{...target},receive,time,flightTime,launchDelay,runTime,interceptors,possible:flightTime>.05&&interceptors.length===0};
 }
 function startTransitionPass(d){
