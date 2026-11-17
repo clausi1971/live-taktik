@@ -1177,9 +1177,9 @@ function spaceBlueReceiver(origin,id,path){
 }
 function spaceRedInterceptor(origin,id,path){
  const speed=state.redMaxSpeed/3.6,radius=2.95,at=t=>spaceBallAt(path,t);
- const time=firstReachTime(origin,at,path.endTime,speed,0,radius)??Math.max(path.endTime,Math.max(0,dist(origin,at(path.endTime))-radius)/speed);
+ const time=firstReachTime(origin,at,path.endTime,speed,redReactionTime,radius,[redReactionTime,path.flightTime])??Math.max(path.endTime,redReactionTime+Math.max(0,dist(origin,at(path.endTime))-radius)/speed);
  const point=at(time),distance=dist(origin,point),runEnd=demoMix(origin,point,distance?Math.max(0,(distance-radius)/distance):0);
- return{id,origin:{...origin},point,runEnd,time,reactionTime:0,speedKmh:state.redMaxSpeed,arrival:dist(origin,path.target)/speed};
+ return{id,origin:{...origin},point,runEnd,time,reactionTime:redReactionTime,speedKmh:state.redMaxSpeed,arrival:redReactionTime+dist(origin,path.target)/speed};
 }
 function spaceRunnerAt(candidate,time){
  if(candidate.via){
@@ -1187,7 +1187,8 @@ function spaceRunnerAt(candidate,time){
   if(distance<=first)return demoMix(candidate.origin,candidate.via,first?distance/first:1);
   const rest=dist(candidate.via,candidate.runEnd);return demoMix(candidate.via,candidate.runEnd,rest?(distance-first)/rest:1);
  }
- return demoMix(candidate.origin,candidate.runEnd,candidate.time?time/candidate.time:1);
+ const delay=candidate.reactionTime||0;
+ return demoMix(candidate.origin,candidate.runEnd,candidate.time>delay?Math.max(0,time-delay)/(candidate.time-delay):time>=delay?1:0);
 }
 function spacePassOption(d,target){
  keepPassRedDistance(d);
@@ -1409,7 +1410,13 @@ function drawPushUpControl(d,root){
 function planPassFreeRuns(d){
  const p=d.play;if(!p||d.freeMode||state.coachingOff)return;
  const closest=d.editReds.map((q,id)=>({id,distance:dist(q,p.startBall)})).sort((a,b)=>a.distance-b.distance||a.id-b.id)[0];
- p.nearestRed={id:closest.id,elapsed:0};
+ const receive=p.kind==='space'?p.spaceTarget:p.receive;
+ const nearReceiver=d.editReds.map((q,id)=>({id,distance:dist(q,receive)})).filter(q=>q.id!==closest.id).sort((a,b)=>a.distance-b.distance||a.id-b.id).slice(0,2);
+ p.redSupportRuns=[...new Set([closest.id,...nearReceiver.map(q=>q.id)])].map(id=>{
+  const origin=d.editReds[id];
+  const hit=p.kind==='space'?spaceRedInterceptor(origin,id,p.race.path):rollingInterception(origin,id,p.startBall,receive,p.time,0,redReactionTime);
+  return{id,origin:{...origin},target:hit&&hit.time<=p.time?{...hit.runEnd}:{...receive},elapsed:0};
+ });
  const source=d.holder??d.editPositions.map((q,id)=>({id,d:dist(q,d.editBall)})).sort((a,b)=>a.d-b.d)[0].id;
  const scene={livePass:true,holdAdvancedBackFour:d.holdAdvancedBackFour,bs:d.editPositions.map(q=>({...q})),rs:d.editReds.map(q=>({...q})),winner:source,receiver:p.id,win:{...d.editBall},offer:{...(p.kind==='space'?p.spaceTarget:p.receive)},firstPass:true};
  const planned=planTransitionSpaces(scene),targets={};planned.forEach((q,id)=>{
@@ -1421,14 +1428,15 @@ function planPassFreeRuns(d){
  d.freeRuns={targets,source,delay:p.launchDelay||0,age:0};d.freeRunRoles=scene.spaceRoles;
 }
 function advanceNearestRed(d,pass){
- const chase=pass.nearestRed;if(!chase)return;
- const delay=pass.kind==='space'?0:redReactionTime;
- const seconds=Math.max(0,pass.elapsed-delay)-Math.max(0,chase.elapsed-delay);chase.elapsed=pass.elapsed;
+ if(!pass.redSupportRuns)return;
  // The predicted interceptor already follows its calculated shortest route.
  const interceptor=pass.kind==='space'?pass.race.red.id:pass.interception?.id;
- if(chase.id===interceptor||seconds<=0)return;
- const origin=d.editReds[chase.id],distance=dist(origin,d.editBall),step=Math.min(Math.max(0,distance-2.95),state.redMaxSpeed/3.6*seconds);
- if(step>0)d.editReds[chase.id]=demoMix(origin,d.editBall,step/distance);
+ for(const chase of pass.redSupportRuns){
+  const seconds=Math.max(0,pass.elapsed-redReactionTime)-Math.max(0,chase.elapsed-redReactionTime);chase.elapsed=pass.elapsed;
+  if(chase.id===interceptor||seconds<=0)continue;
+  const origin=d.editReds[chase.id],distance=dist(origin,chase.target),step=Math.min(distance,state.redMaxSpeed/3.6*seconds);
+  if(step>0)d.editReds[chase.id]=demoMix(origin,chase.target,step/distance);
+ }
 }
 function advancePassFreeRuns(d,seconds){
  if(!d.freeRuns||d.freeMode||state.coachingOff)return;const runs=d.freeRuns,oldAge=runs.age;runs.age+=Math.max(0,seconds);let moved=false;
