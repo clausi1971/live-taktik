@@ -702,7 +702,16 @@ function disableCoaching(){
 }
 $('coachingToggle').onclick=resumeDefense;
 
-function placeBlue(i,p){pauseDefense();state.manualBlue[i]={x:clamp(p.x,0,68),y:clamp(p.y,0,105)};p=freeBluePosition(state.manualBlue[i],blue.filter((_,id)=>id!==i),i,false,false);state.manualBlue[i]={x:p.x,y:p.y};Object.assign(blue[i],p,{vx:0,vy:0});for(const id of Object.keys(state.manualBlue))state.manualBlue[id]={x:blue[id].x,y:blue[id].y};}
+function placeBlue(i,p){
+ pauseDefense();p={x:clamp(p.x,1,67),y:clamp(p.y,1,104)};
+ Object.assign(blue[i],p,{vx:0,vy:0});
+ for(const id of Object.keys(state.manualBlue))state.manualBlue[id]={x:blue[id].x,y:blue[id].y};
+ if(!transitionDemo){
+  const active=drag;startInitialCoaching();
+  if(active?.kind==='blue')transitionDrag={team:'blue',id:i,pointer:active.id,origin:{...p},dx:active.dx,dy:active.dy};
+  drag=null;
+ }
+}
 $('autoBlue').onclick=resumeDefense;$('enableAutoBlue').onclick=resumeDefense;
 function nearest(){return redMidfieldIds().map(i=>({i,d:dist(state.reds[i],state.ball)})).sort((a,b)=>a.d-b.d)[0].i;}
 function passToRed(id,speedKmh=passSpeed*3.6){
