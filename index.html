@@ -951,7 +951,7 @@ function renderTransitionDemo(dt){
  if(d.firstPass&&t>=2&&t<6)line(d.win,d.offer,'#e9d780');if(d.secondPass&&t>=6&&t<11)line(t<9?ps[d.receiver]:d.carry,d.deep,'#e9d780');
  d.rs.forEach((p,id)=>{draw(demoRedAt(p,id,t),'red',id);});ps.forEach((p,id)=>draw(p,'blue',id));
  function draw(p,team,id){const g=el('g',{transform:`translate(${p.x} ${p.y})`},root);el('circle',{r:1.9,fill:team==='blue'?'#6cace9':'#e37265',stroke:'#fff9','stroke-width':'.22'},g);el('text',{'text-anchor':'middle','dominant-baseline':'central','font-size':'1.6',fill:'white','font-weight':'700'},g).textContent=playerLabel(team,id);}
- el('circle',{cx:ball.x,cy:ball.y,r:1.05,fill:'#fff',stroke:'#e8d37b','stroke-width':'.5'},root);
+ drawSceneBall(ball,root,{'pointer-events':'none'});
 }
 $('transitionStart').onclick=()=>{if(transitionDemo?.initialCoaching){finishInitialCoaching();startTransitionDemo();}else if(transitionDemo)stopTransitionDemo();else startTransitionDemo();};
 $('transitionClose').onclick=()=>{
@@ -1137,6 +1137,13 @@ function drawTransitionChains(positions,root){
   if(state.highlightChains)members.forEach(q=>el('circle',{cx:q.x,cy:q.y,r:'2.55',fill:'none',stroke:color,'stroke-width':'.65','pointer-events':'none'},root));
  });
 }
+function drawSceneBall(point,root,attributes={}){
+ const ball=el('g',{transform:'translate('+point.x+' '+point.y+')',...attributes},root);
+ el('circle',{r:2.2,fill:'none',stroke:'#f0d389','stroke-opacity':'.6','stroke-width':'.45','pointer-events':'none'},ball);
+ el('circle',{r:1.25,fill:'#fffdf0',stroke:'#26372f','stroke-width':'.2'},ball);
+ el('path',{d:'M-.5 -.4L.3 -.65 .7 .1 .1 .65 -.6 .3Z',fill:'#26372f','pointer-events':'none'},ball);
+ return ball;
+}
 function renderTransitionInteractive(d){
  if(keepPassRedDistance(d))updateTransitionPreview();
  updateTransitionFreeControls(d);
@@ -1179,7 +1186,7 @@ function renderTransitionInteractive(d){
   }
  };
  d.editReds.forEach((q,id)=>draw(q,'red',id));d.editPositions.forEach((q,id)=>draw(q,'blue',id));
- const ball=el('circle',{cx:d.editBall.x,cy:d.editBall.y,r:1.05,fill:'#fff',stroke:'#e8d37b','stroke-width':'.5','pointer-events':d.freeMode?'all':'none',class:d.freeMode?'transition-edit-player':'',role:d.freeMode?'button':null,tabindex:d.freeMode?0:null,'aria-label':d.freeMode?'Ball frei verschieben':null,'data-space-control':'coaching-ball'},root);
+ const ball=drawSceneBall(d.editBall,root,{'pointer-events':d.freeMode?'all':'none',class:d.freeMode?'transition-edit-player':'',role:d.freeMode?'button':null,tabindex:d.freeMode?0:null,'aria-label':d.freeMode?'Ball frei verschieben':null,'data-space-control':'coaching-ball'});
  if(d.freeMode){
   ball.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();const q=point(e),origin={...d.editBall};transitionDrag={team:'ball',pointer:e.pointerId,origin,dx:origin.x-q.x,dy:origin.y-q.y};$('pitch').setPointerCapture(e.pointerId);});
   ball.addEventListener('keydown',e=>{const v={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(v){e.preventDefault();moveCoachingBall({x:d.editBall.x+v[0],y:d.editBall.y+v[1]});}});
