@@ -1081,6 +1081,10 @@ function moveTransitionPlayer(id,q,origin,team='blue'){
  if(id===d.holder){d.editBall={...position};d.preview=null;const hit=opponents(d).findIndex(p=>dist(p,d.editBall)<=2.95);if(hit>=0)completePassPossession(d,opposingTeam(d),hit);}
  else d.preview=transitionPassOption(d,id,origin,position);
 }
+function moveCoachingBall(q){
+ const d=transitionDemo;if(!d?.interactive||!d.freeMode)return;
+ d.editBall={x:clamp(q.x,1,67),y:clamp(q.y,1,104)};d.holder=null;d.preview=null;d.editDirty=true;
+}
 function drawTransitionChains(positions,root){
  let first=1;
  formations[state.blueFormation].forEach((count,row)=>{
@@ -1135,12 +1139,16 @@ function renderTransitionInteractive(d){
   }
  };
  d.editReds.forEach((q,id)=>draw(q,'red',id));d.editPositions.forEach((q,id)=>draw(q,'blue',id));
- el('circle',{cx:d.editBall.x,cy:d.editBall.y,r:1.05,fill:'#fff',stroke:'#e8d37b','stroke-width':'.5','pointer-events':'none'},root);
+ const ball=el('circle',{cx:d.editBall.x,cy:d.editBall.y,r:1.05,fill:'#fff',stroke:'#e8d37b','stroke-width':'.5','pointer-events':d.freeMode?'all':'none',class:d.freeMode?'transition-edit-player':'',role:d.freeMode?'button':null,tabindex:d.freeMode?0:null,'aria-label':d.freeMode?'Ball frei verschieben':null,'data-space-control':'coaching-ball'},root);
+ if(d.freeMode){
+  ball.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();const q=point(e),origin={...d.editBall};transitionDrag={team:'ball',pointer:e.pointerId,origin,dx:origin.x-q.x,dy:origin.y-q.y};$('pitch').setPointerCapture(e.pointerId);});
+  ball.addEventListener('keydown',e=>{const v={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(v){e.preventDefault();moveCoachingBall({x:d.editBall.x+v[0],y:d.editBall.y+v[1]});}});
+ }
  drawSpacePassControls(d,root);
  drawPlayerPassControl(d,root);
  drawPushUpControl(d,root);
 }
-$('pitch').addEventListener('pointermove',e=>{if(!transitionDrag||e.pointerId!==transitionDrag.pointer)return;e.preventDefault();const q=point(e),v=transitionDrag;moveTransitionPlayer(v.id,{x:q.x+v.dx,y:q.y+v.dy},v.origin,v.team);});
+$('pitch').addEventListener('pointermove',e=>{if(!transitionDrag||e.pointerId!==transitionDrag.pointer)return;e.preventDefault();const q=point(e),v=transitionDrag,position={x:q.x+v.dx,y:q.y+v.dy};if(v.team==='ball')moveCoachingBall(position);else moveTransitionPlayer(v.id,position,v.origin,v.team);});
 for(const type of ['pointerup','pointercancel','lostpointercapture'])$('pitch').addEventListener(type,finishTransitionDrag);
 
 // A pass into space is selected by holding the mouse, then confirmed separately.
